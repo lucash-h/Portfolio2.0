@@ -1,0 +1,26 @@
+node_modules/
+.svelte-kit/
+build/
+dist/
+.env
+.env.local
+*.log
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+.ml_venv/
+venv/
+.ruff_cache/
+.pytest_cache/
+
+# training artifacts
+ml/runs/
+ml/checkpoints/
+*.pt
+*.pth
+
+# os
+.DS_Store
+Thumbs.db
