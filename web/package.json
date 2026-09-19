@@ -16,6 +16,7 @@
 		"@sveltejs/adapter-node": "^5.4.0",
 		"@sveltejs/kit": "^2.63.0",
 		"@sveltejs/vite-plugin-svelte": "^7.1.2",
+		"@types/pg": "^8.23.1",
 		"jsdom": "^26.0.0",
 		"svelte": "^5.56.1",
 		"svelte-check": "^4.6.0",
@@ -24,6 +25,7 @@
 		"vitest": "^5.0.1"
 	},
 	"dependencies": {
-		"onnxruntime-web": "^1.30.0"
+		"onnxruntime-web": "^1.30.0",
+		"pg": "^8.23.0"
 	}
 }
