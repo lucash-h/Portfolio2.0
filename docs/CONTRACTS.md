@@ -96,6 +96,20 @@ never learns "red vs yellow"; it learns "me vs them". Callers flip planes, not t
 
 Illegal columns are masked by the *caller* after softmax, not by the network.
 
+**Batch dimension — where it is and is not.** The table above describes the ONNX graph,
+which is batched: `[1,2,6,7]`. A single-position encoder does **not** include that
+dimension; it produces `[2,6,7]`. The batch axis is added at the inference boundary.
+
+| Layer | Shape | Who |
+|---|---|---|
+| `ml/connect4/env.py` `encode()` | `[2,6,7]` | one position, for training and MCTS |
+| Training batch | `[N,2,6,7]` | stacked by the training loop |
+| ONNX graph input | `[1,2,6,7]` | the exported model |
+| `web/src/lib/ml/session.ts` | `[1,2,6,7]` | browser inference |
+
+Everything else about the encoding — plane order, perspective, row 0 at the bottom —
+is identical at every layer. Only the leading axis differs.
+
 ## 4. Racer
 
 ### Determinism requirements
