@@ -1,12 +1,18 @@
 <script lang="ts">
 	/**
 	 * Connect 4 exhibit page. Owns opponent-tier selection and supplies a move
-	 * function to Connect4Board via the `opponentMove` prop. The real minimax
-	 * / ML opponents are wired in later by the orchestrator — this page only
-	 * ever supplies a placeholder so the exhibit is playable today.
+	 * function to Connect4Board via the `opponentMove` prop.
+	 *
+	 * Two kinds of opponent share that one prop: trained checkpoints, which run
+	 * through ONNX in the browser, and built-in alpha-beta practice bots. Which
+	 * one is used depends purely on whether the selected tier has a model file,
+	 * so publishing a manifest is all it takes to switch the exhibit over to
+	 * real networks — no code change here.
 	 */
 	import Connect4Board from '$lib/components/Connect4Board.svelte';
 	import { chooseMoveAsync } from '$lib/games/connect4/minimaxClient';
+	import { legalMoves } from '$lib/games/connect4/engine';
+	import { chooseMove as chooseMoveFromModel } from '$lib/ml/session';
 	import type { Column, GameState } from '$lib/games/connect4/types';
 
 	interface CheckpointTier {
@@ -88,15 +94,31 @@
 
 	const selectedTier = $derived(tiers.find((t) => t.id === selectedTierId) ?? tiers[0]);
 
+	/** Set when a checkpoint fails to load, so the UI can say why it degraded. */
+	let modelFallbackNote = $state<string | null>(null);
+
 	/**
-	 * Supplies the opponent's move. Runs alpha-beta search in a Web Worker so the
-	 * board stays responsive; see minimaxClient for the fallback behaviour.
+	 * Supplies the opponent's move.
 	 *
-	 * When trained checkpoints land, branch here on `selectedTier.file` and route
-	 * to ONNX inference instead. The board's prop signature does not change.
+	 * A tier with a `file` is a trained checkpoint and runs through ONNX in the
+	 * browser. A tier without one is a built-in alpha-beta practice bot. Model
+	 * inference never throws — on any failure it returns a typed result, and we
+	 * degrade to the search rather than leaving the board waiting forever.
 	 */
 	async function opponentMove(state: GameState): Promise<Column> {
-		const depth = selectedTier?.searchDepth ?? 4;
+		const tier = selectedTier;
+
+		if (tier?.file) {
+			const legal = legalMoves(state);
+			const result = await chooseMoveFromModel(tier, state, legal, { mode: 'greedy' });
+			if (result.ok) {
+				modelFallbackNote = null;
+				return result.column;
+			}
+			modelFallbackNote = `Could not load ${tier.label} (${result.reason}). Playing the search opponent instead.`;
+		}
+
+		const depth = tier?.searchDepth ?? 4;
 		return chooseMoveAsync(state, { maxDepth: depth });
 	}
 
@@ -129,6 +151,9 @@
 			</option>
 		{/each}
 	</select>
+	{#if modelFallbackNote}
+		<p class="tier-note" role="status">{modelFallbackNote}</p>
+	{/if}
 	{#if manifestStatus === 'fallback'}
 		<p class="tier-note">
 			No trained checkpoints published yet. These practice tiers are classical
