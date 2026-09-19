@@ -73,8 +73,13 @@
 					throw new Error('manifest has no connect4 tiers');
 				}
 				if (!cancelled) {
-					tiers = data.connect4;
-					selectedTierId = tiers[0].id;
+					// Trained checkpoints first (weakest-first, as the manifest
+					// guarantees), then the built-in search bots. Early checkpoints are
+					// genuinely weak, so keeping the practice tiers around gives a
+					// stronger opponent to play against and makes the contrast between
+					// "learned" and "classical" visible side by side.
+					tiers = [...data.connect4, ...PRACTICE_TIERS];
+					selectedTierId = data.connect4[0].id;
 					manifestStatus = 'loaded';
 				}
 			} catch {
@@ -133,9 +138,10 @@
 
 <h1>Connect 4</h1>
 <p>
-	Play against a bot. Once self-play training has run, each tier here will be a real
-	checkpoint — the network as it was after a given number of games — so difficulty
-	is a point in the training run rather than a tuning knob.
+	Play against a bot. Each numbered tier is a real checkpoint from a self-play
+	training run — the network exactly as it was after that many games — so difficulty
+	here is a point in the training history, not a tuning knob. The network runs in
+	your browser; nothing about your moves is sent to a server to pick a reply.
 </p>
 
 <div class="tier-picker">
@@ -158,6 +164,12 @@
 		<p class="tier-note">
 			No trained checkpoints published yet. These practice tiers are classical
 			alpha-beta search at increasing depth, not learned models.
+		</p>
+	{:else if manifestStatus === 'loaded'}
+		<p class="tier-note">
+			Tiers labelled by game count are real self-play checkpoints — the network
+			exactly as it was after that many games. They are early in training and play
+			accordingly. The practice tiers are classical alpha-beta search, for contrast.
 		</p>
 	{/if}
 </div>

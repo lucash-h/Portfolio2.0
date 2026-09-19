@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "connect4": [
+    {
+      "id": "c4-0000050",
+      "label": "50 games",
+      "file": "connect4/c4-0000050.onnx",
+      "gamesTrained": 50,
+      "elo": null,
+      "mctsSims": 48,
+      "sizeKb": 351
+    },
+    {
+      "id": "c4-0000150",
+      "label": "150 games",
+      "file": "connect4/c4-0000150.onnx",
+      "gamesTrained": 150,
+      "elo": null,
+      "mctsSims": 48,
+      "sizeKb": 351
+    },
+    {
+      "id": "c4-0000300",
+      "label": "300 games",
+      "file": "connect4/c4-0000300.onnx",
+      "gamesTrained": 300,
+      "elo": null,
+      "mctsSims": 48,
+      "sizeKb": 351
+    }
+  ],
+  "racer": []
+}
