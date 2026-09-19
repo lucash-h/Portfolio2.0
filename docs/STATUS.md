@@ -84,9 +84,9 @@ Everything below was checked by running it, not by taking an agent's word for it
 - **Session rate limits killed four agents mid-flight** on 2026-09-18. Three had already
   written their files; only P2-D was a real loss. Check for partial work before re-running
   a package — do not assume a failed agent produced nothing.
-- **Agent self-reports have overstated results three times** (a Caddy validation that never
+- **Agent self-reports have overstated results repeatedly** (a Caddy validation that never
   ran, a venv path, a claim of `.svelte-kit/output` being adapter-node's output). Every
   package gets independently verified before being marked done. This has caught real bugs
   every time.
 - **Docker Desktop is not running**, so nothing container-related has been executed.
-- Nothing is pushed to `origin` yet.
+- `phase-0-foundation` is pushed to `origin`; `main` still holds only the initial commit.
