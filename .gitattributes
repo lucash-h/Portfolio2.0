@@ -1,0 +1,26 @@
+# Normalise line endings. Development happens on Windows; deployment is Linux.
+# A shell script or Dockerfile checked out with CRLF fails on the VPS with an
+# obscure "bad interpreter" or "not found" error, so these are pinned to LF.
+
+* text=auto eol=lf
+
+*.sh            text eol=lf
+Dockerfile*     text eol=lf
+Caddyfile       text eol=lf
+*.yml           text eol=lf
+*.yaml          text eol=lf
+*.json          text eol=lf
+*.py            text eol=lf
+*.ts            text eol=lf
+*.js            text eol=lf
+*.svelte        text eol=lf
+*.css           text eol=lf
+*.html          text eol=lf
+*.md            text eol=lf
+
+# Binary: never touch these.
+*.onnx          binary
+*.png           binary
+*.jpg           binary
+*.woff2         binary
+*.pt            binary
