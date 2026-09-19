@@ -224,9 +224,9 @@ exist. The UI reads it; nothing hardcodes a checkpoint. The Python export step w
   "version": 1,
   "connect4": [
     {
-      "id": "c4-000001k",
+      "id": "c4-0001000",
       "label": "1,000 games",
-      "file": "connect4/c4-000001k.onnx",
+      "file": "connect4/c4-0001000.onnx",
       "gamesTrained": 1000,
       "elo": 412,
       "mctsSims": 64,
@@ -248,6 +248,10 @@ exist. The UI reads it; nothing hardcodes a checkpoint. The Python export step w
 
 - `id` is stable forever and is what gets written to the database. Never reuse an id
   for a different set of weights.
+- Connect 4 ids are `c4-<games padded to 7 digits>`, matching the checkpoint filename
+  `train.py` writes (`c4-0001000.pt`). Racer ids are `rc-gen<generation padded to 4>`.
+  Zero padding matters: it makes a lexicographic sort the same as training order, which
+  is what the weakest-first ordering guarantee relies on.
 - Arrays are ordered weakest-first. The UI renders them in array order.
 - `file` is relative to `web/static/models/`.
 - `elo` may be `null` until the tournament has run.

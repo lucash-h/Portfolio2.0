@@ -123,7 +123,12 @@ def run_training_step(
     return float(policy_loss.item()), float(value_loss.item())
 
 
-def train(config: TrainConfig, *, resume_path: Path | None = None) -> None:
+def train(
+    config: TrainConfig,
+    *,
+    resume_path: Path | None = None,
+    ladder: tuple[int, ...] | None = None,
+) -> None:
     net = Connect4Net(channels=config.channels, num_blocks=config.blocks)
     optimizer = torch.optim.Adam(net.parameters(), lr=config.learning_rate)
     buffer = ReplayBuffer(config.buffer_capacity)
@@ -142,7 +147,8 @@ def train(config: TrainConfig, *, resume_path: Path | None = None) -> None:
         print(f"Resumed from {resume_path}: games_trained={games_trained}")
 
     rng = np.random.default_rng(config.seed)
-    ladder_remaining = [g for g in CHECKPOINT_LADDER if g > games_trained]
+    ladder = tuple(sorted(ladder)) if ladder else CHECKPOINT_LADDER
+    ladder_remaining = [g for g in ladder if g > games_trained]
 
     weights_tmp_path = CHECKPOINTS_DIR / "_selfplay_weights.pt"
     CHECKPOINTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -230,6 +236,17 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--blocks", type=int, default=TrainConfig.blocks)
     parser.add_argument("--seed", type=int, default=TrainConfig.seed)
     parser.add_argument(
+        "--ladder",
+        type=str,
+        default=None,
+        help=(
+            "Comma-separated cumulative game counts at which to save ladder "
+            "checkpoints, e.g. '50,150,300'. Defaults to "
+            f"{','.join(str(g) for g in CHECKPOINT_LADDER)}. Useful for producing "
+            "a short but genuine ladder without waiting for a full run."
+        ),
+    )
+    parser.add_argument(
         "--resume",
         type=str,
         default=None,
@@ -261,8 +278,11 @@ def main(argv: list[str] | None = None) -> None:
     print(f"Parameter count: {count_parameters(Connect4Net(config.channels, config.blocks))}")
 
     resume_path = Path(args.resume) if args.resume else None
+    ladder = (
+        tuple(int(g.strip()) for g in args.ladder.split(",") if g.strip()) if args.ladder else None
+    )
     start = time.time()
-    train(config, resume_path=resume_path)
+    train(config, resume_path=resume_path, ladder=ladder)
     print(f"Done in {time.time() - start:.1f}s")
 
 
