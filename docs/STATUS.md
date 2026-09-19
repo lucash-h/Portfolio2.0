@@ -4,7 +4,7 @@ Living snapshot of where the build actually is. Updated at the end of each work
 session. `PLAN.md` is the intent; this file is the reality.
 
 **Last updated:** 2026-09-19
-**Branch:** `phase-0-foundation` (not yet pushed, not yet merged to `main`)
+**Branch:** `phase-0-foundation` — pushed to origin, not yet merged to `main`
 
 ---
 
@@ -12,8 +12,9 @@ session. `PLAN.md` is the intent; this file is the reality.
 
 Everything below was checked by running it, not by taking an agent's word for it.
 
-- `cd web && npm run check` — 347 files, 0 errors, 0 warnings
-- `cd web && npm run test` — 330 tests passing across 4 files
+- `cd web && npm run check` — 367 files, 0 errors, 0 warnings
+- `cd web && npm run test` — 353 tests passing across 7 files
+- `.ml_venv/Scripts/python.exe -m pytest ml/ -q` — 86 tests passing
 - `cd web && npm run build` — clean; `node build` serves and honours `PORT`
 - All routes return 200 from the production artifact: `/`, `/work`, `/about`, `/lab`, `/lab/connect4`
 - `ruff check ml/` and `ruff format --check ml/` clean; `pytest ml/` passes
@@ -48,21 +49,35 @@ Everything below was checked by running it, not by taking an agent's word for it
 | P1-B board UI | done | Fixed a Svelte 5 `$state` shadowing bug and an unworkable computed-style test. |
 | P1-C minimax | done | Fixed two test bugs; search itself was correct. |
 | P2-S ml scaffold | done | venv lives at `.ml_venv/`, now gitignored. |
-| P2-D browser ONNX | **~20%** | Only `mlTypes.ts` + a synthetic `.onnx` fixture. Needs `session.ts`, `registry.ts`, `infer.worker.ts`, tests. |
+| P2-D browser ONNX | done | Real inference verified by tampering: corrupting the synthetic model fails exactly the tests that use it. Wired into the exhibit page. |
+| P2-A env + MCTS | done | Parity proven both ways; tamper-tested. Python and TypeScript now agree with the same fixture corpus. |
 | P0-C content | **not started** | Blocked on real content from Lucas. |
 
 ## What is next, in order
 
-1. **Finish P2-D** — the browser ONNX runtime. Types and the synthetic test model
-   already exist, so this is session caching, manifest loading, softmax + illegal-move
-   masking, the worker, and tests. Needs no trained model; the signature is contract-fixed.
-2. **C0.3** — start Docker Desktop, then `caddy validate` and a real `docker compose up`.
-   This is the last unverified piece of the deploy story.
-3. **Phase 2 proper** — P2-A (env + MCTS), then P2-B (net + training). P2-A is
-   unblocked right now: the fixtures exist and the parity test can be written today.
+1. **P2-B — network and training loop.** The last piece before real checkpoints exist.
+   Needs torch installed into `.ml_venv` (a large download, deliberately deferred until
+   now). Builds on `env.encode()` and the injected-evaluator MCTS, both done.
+2. **P2-C — ONNX export + manifest.** Small once P2-B produces weights. The moment a
+   manifest lands in `web/static/models/`, the exhibit switches to real networks with
+   no code change — that path is already wired and typechecked.
+3. **C0.3** — start Docker Desktop, then `caddy validate` and a real `docker compose up`.
+   The last unverified piece of the deploy story.
 4. **Phase 3** — P3-A (db + API) and P3-B (dashboard) are mutually independent and can
-   run in parallel, since the `/api/stats` shape is fixed in the contract.
+   run in parallel right now; the `/api/stats` shape is contract-fixed. Neither depends
+   on training finishing.
 5. **P0-C** — real site content, whenever Lucas supplies it.
+
+### Notes for P2-B specifically
+
+- `mcts.search(node, eval_fn, n)` adds `n` **new** simulations to whatever the node
+  already has; it does not target a total. Matters when reusing a subtree via
+  `advance_root`.
+- `env.encode()` returns `[2,6,7]`. The training loop stacks to `[N,2,6,7]`; the ONNX
+  graph is `[1,2,6,7]`. See the batch-dimension table in CONTRACTS §3.
+- `env.apply_move()` raises plain `ValueError` on an illegal move.
+- Self-play must honour a core limit. The VPS runs other things and Lucas asked for it
+  to stay light.
 
 ## Standing notes
 
