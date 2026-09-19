@@ -1,0 +1,101 @@
+@import './tokens.css';
+
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
+
+html {
+	-webkit-text-size-adjust: 100%;
+	text-size-adjust: 100%;
+}
+
+body {
+	margin: 0;
+	background-color: var(--color-bg);
+	color: var(--color-text);
+	font-family: var(--font-body);
+	font-size: var(--font-size-base);
+	line-height: var(--line-height-base);
+	min-width: 320px;
+	overflow-x: hidden;
+	transition:
+		background-color var(--transition-base),
+		color var(--transition-base);
+}
+
+h1,
+h2,
+h3,
+h4 {
+	font-family: var(--font-sans);
+	line-height: var(--line-height-tight);
+	font-weight: 600;
+	margin: 0 0 var(--space-4) 0;
+}
+
+h1 {
+	font-size: var(--font-size-2xl);
+}
+
+h2 {
+	font-size: var(--font-size-xl);
+}
+
+h3 {
+	font-size: var(--font-size-lg);
+}
+
+p {
+	margin: 0 0 var(--space-4) 0;
+	max-width: var(--measure);
+}
+
+a {
+	color: var(--color-accent);
+	text-decoration-thickness: 1px;
+	text-underline-offset: 0.15em;
+}
+
+a:hover {
+	text-decoration-thickness: 2px;
+}
+
+/* Visible focus ring everywhere, keyboard and mouse alike. */
+:focus-visible {
+	outline: 2px solid var(--color-focus-ring);
+	outline-offset: 2px;
+	border-radius: var(--radius-sm);
+}
+
+.skip-link {
+	position: absolute;
+	left: var(--space-4);
+	top: -100px;
+	background: var(--color-accent);
+	color: var(--color-accent-contrast);
+	padding: var(--space-2) var(--space-4);
+	border-radius: var(--radius-sm);
+	z-index: 100;
+	transition: top var(--transition-fast);
+}
+
+.skip-link:focus-visible {
+	top: var(--space-4);
+	outline-offset: 4px;
+}
+
+.visually-hidden {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip: rect(0 0 0 0);
+	white-space: nowrap;
+}
+
+button {
+	font-family: inherit;
+	font-size: inherit;
+}
