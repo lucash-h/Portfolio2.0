@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "portfolio2-ml"
+version = "0.1.0"
+description = "Machine learning training pipeline for Connect 4 and Racer"
+requires-python = ">=3.12"
+dependencies = [
+    "numpy>=1.24.0",
+    "torch>=2.0.0",
+    "onnx>=1.14.0",
+    "onnxruntime>=1.16.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "ruff>=0.1.0",
+]
+
+[tool.setuptools]
+packages = ["ml", "ml.connect4", "ml.racer", "ml.export", "ml.tournament", "ml.conformance"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "B",    # flake8-bugbear
+    "UP",   # pyupgrade
+]
+ignore = []
+
+[tool.ruff.lint.isort]
+known-first-party = ["ml"]
+
+[tool.pytest.ini_options]
+testpaths = ["ml"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v"
