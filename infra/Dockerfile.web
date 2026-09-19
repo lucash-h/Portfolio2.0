@@ -1,0 +1,51 @@
+# Multi-stage build for SvelteKit app with Node.js 24 Alpine
+# Build context: repo root (../)
+
+# Stage 1: Builder
+FROM node:24-alpine AS builder
+
+WORKDIR /app
+
+# Copy package files and install dependencies
+# Using npm ci for reproducible, locked dependency installation
+COPY web/package.json web/package-lock.json ./
+
+RUN npm ci
+
+# Copy source code
+COPY web/ ./
+
+# Build the SvelteKit app
+# adapter-node produces a `build/` directory
+RUN npm run build
+
+# Stage 2: Runtime
+FROM node:24-alpine
+
+WORKDIR /app
+
+# Create a non-root user for security
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nodejs -u 1001
+
+# Copy built application from builder
+COPY --from=builder /app/build ./build
+COPY --from=builder /app/package.json ./package.json
+
+# Install production dependencies only
+# Skip dev dependencies to reduce image size
+RUN npm ci --omit=dev && \
+    chown -R nodejs:nodejs /app
+
+# Switch to non-root user
+USER nodejs
+
+# Expose the port (default 3000, but configurable via PORT env var)
+EXPOSE 3000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:' + (process.env.PORT || 3000), (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"
+
+# Start the app
+CMD ["node", "build"]
