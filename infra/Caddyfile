@@ -1,107 +1,39 @@
-# Caddyfile - Two-mode deployment
+# One file, two modes.
 #
-# Supports both local development and production deployment via environment variables.
-# Uses a snippet-based approach with conditional logic:
+#   Local  (DOMAIN unset)          -> site address ":80", plain HTTP, no TLS
+#   Prod   (DOMAIN=example.com)    -> automatic HTTPS via Let's Encrypt
 #
-# Local development (DOMAIN unset or "localhost"):
-#   - Serves plain HTTP on :80
-#   - No TLS certificate required
-#   - Useful for `docker compose up` on a laptop
-#
-# Production (DOMAIN set to real hostname):
-#   - Serves HTTPS on :443 with automatic Let's Encrypt certificate
-#   - Redirects HTTP :80 to HTTPS
-#   - Adds HSTS header for security
-#
-# Mechanism: The site block uses {env.DOMAIN|localhost} to expand to either
-# the real domain (auto-HTTPS) or localhost (plain HTTP). Caddy sees different
-# hostnames at startup and provisions certificates accordingly.
+# The mechanism is the site address itself: `{$DOMAIN::80}` substitutes the
+# DOMAIN environment variable at parse time, falling back to ":80". Caddy then
+# does the right thing for each, including the HTTP->HTTPS redirect in
+# production, which it adds automatically for a named host. There is no
+# conditional logic to get wrong.
 
-# Shared configuration snippets
+{$DOMAIN::80} {
+	encode gzip zstd
 
-(reverse_proxy_headers) {
-  reverse_proxy web:3000 {
-    header_up X-Forwarded-For {http.request.remote.host}
-    header_up X-Forwarded-Proto {http.request.scheme}
-    header_up X-Forwarded-Host {http.request.host}
-  }
-}
+	header {
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# Do not advertise the server software.
+		-Server
+	}
 
-(security_headers_base) {
-  header X-Content-Type-Options "nosniff"
-  header X-Frame-Options "DENY"
-  header Referrer-Policy "strict-origin-when-cross-origin"
-}
+	# HSTS only where TLS is actually in use. Sending it over plain HTTP on
+	# localhost would teach the browser to force HTTPS for every other local
+	# dev server on the machine, which is a genuinely annoying thing to undo.
+	# "preload" is deliberately omitted: it is a long-term commitment that
+	# should be an explicit decision, not a default.
+	@https expression {scheme} == "https"
+	header @https Strict-Transport-Security "max-age=31536000; includeSubDomains"
 
-(security_headers_production) {
-  import security_headers_base
-  header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
-}
+	# Caddy sets X-Forwarded-For, -Proto and -Host on its own; setting them
+	# again here would append duplicates.
+	reverse_proxy web:3000
 
-(compression_logging) {
-  encode gzip zstd
-  log {
-    output stdout
-    format json
-  }
-}
-
-# Main site block
-# Expands {env.DOMAIN|localhost} to either real domain or localhost
-# Caddy automatically provisions HTTPS for real domains, plain HTTP for localhost
-{env.DOMAIN|localhost} {
-  # Use internal TLS for localhost (no external cert needed)
-  @is_localhost {
-    host localhost 127.0.0.1
-  }
-
-  handle @is_localhost {
-    tls internal
-  }
-
-  # For non-localhost (production), Caddy auto-provisions Let's Encrypt certs
-  # and automatically applies HTTPS
-
-  # Import reverse proxy
-  import reverse_proxy_headers
-
-  # Apply appropriate security headers based on environment
-  @is_production {
-    not {
-      host localhost 127.0.0.1
-    }
-  }
-
-  handle @is_production {
-    # Production: strict security headers with HSTS
-    import security_headers_production
-  }
-
-  handle {
-    # Local development: basic headers
-    import security_headers_base
-  }
-
-  # Compression and logging (all environments)
-  import compression_logging
-}
-
-# HTTP-to-HTTPS redirect for production domains
-# This catches HTTP requests to non-localhost domains
-@redirect_to_https {
-  not {
-    host localhost 127.0.0.1
-  }
-  scheme http
-}
-
-handle @redirect_to_https {
-  redir https://{host}{uri} permanent
-}
-
-# Fallback HTTP handler for any unmatched requests
-:80 {
-  import reverse_proxy_headers
-  import security_headers_base
-  import compression_logging
+	log {
+		output stdout
+		format json
+	}
 }

@@ -28,13 +28,17 @@ WORKDIR /app
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S nodejs -u 1001
 
-# Copy built application from builder
+# Copy built application from builder.
+# The lockfile is required here, not optional: `npm ci` refuses to run without
+# it. Copying package.json alone fails the build.
 COPY --from=builder /app/build ./build
 COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/package-lock.json ./package-lock.json
 
 # Install production dependencies only
 # Skip dev dependencies to reduce image size
 RUN npm ci --omit=dev && \
+    npm cache clean --force && \
     chown -R nodejs:nodejs /app
 
 # Switch to non-root user
