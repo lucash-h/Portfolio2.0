@@ -297,6 +297,16 @@ degraded game.
 
 `GET /api/stats` — dashboard data. Cached 60s.
 
+**Ordering guarantee.** Both `byCheckpoint` arrays are ordered **weakest-first, matching
+manifest order** (§5), and the dashboard renders them in the order given without
+re-sorting. The Elo curve reads left-to-right as "later in training", so an API that
+returned rows in arbitrary order — `ORDER BY` omitted, or grouped by insertion — would
+silently produce a chart whose x-axis means nothing. The server owns this ordering; the
+client must not paper over it.
+
+A checkpoint with no logged games still appears, with zero counts. Absence from the array
+means the checkpoint does not exist, not that nobody has played it.
+
 ```jsonc
 {
   "totalGames": 18422,
