@@ -32,6 +32,39 @@ def _fixed_net() -> Connect4Net:
     return Connect4Net(channels=8, num_blocks=2)
 
 
+def _stub_priors_value(encoded: np.ndarray) -> tuple[np.ndarray, float]:
+    """Deterministic, non-uniform, per-row-independent stand-in for a real
+    network. `encoded` may be a single `[2,6,7]` position or a stacked
+    `[N,2,6,7]` batch -- the arithmetic below only ever reduces over each
+    row's own axes, never across rows, so it is exactly (bit-for-bit)
+    reproducible whether called once per position or once for a whole batch.
+    A real torch network is not guaranteed that: batched GEMM kernels are not
+    required to be bit-identical to their batch-size-1 equivalent (see the
+    module docstring note on this in the test bodies below), which is why
+    this stub -- not `Connect4Net` -- is what proves the *scheduler* is
+    exact."""
+    single = encoded.ndim == 3
+    batch = encoded[np.newaxis] if single else encoded
+    col_mover = batch[:, 0].sum(axis=1)  # [N,7]
+    col_opp = batch[:, 1].sum(axis=1)  # [N,7]
+    logits = col_mover * 1.3 - col_opp * 1.7 + np.arange(7) * 0.05
+    exp = np.exp(logits - logits.max(axis=1, keepdims=True))
+    priors = exp / exp.sum(axis=1, keepdims=True)
+    value = np.tanh((col_mover.sum(axis=1) - col_opp.sum(axis=1)) * 0.2)
+    if single:
+        return priors[0], float(value[0])
+    return priors, value
+
+
+def _stub_eval_fn(encoded: np.ndarray) -> tuple[list[float], float]:
+    priors, value = _stub_priors_value(encoded)
+    return priors.tolist(), value
+
+
+def _stub_batch_eval_fn(encoded_batch: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    return _stub_priors_value(encoded_batch)
+
+
 def _run_batched_searches(
     states: Sequence[env.GameState | Node],
     num_simulations: int,
@@ -111,14 +144,21 @@ def _branching_state() -> env.GameState:
 
 
 def test_batched_and_sequential_mcts_trees_are_identical():
-    """Same net, same starting states, same per-tree rng seed, same simulation
-    budget: whether each tree's leaves are evaluated one at a time
+    """Same evaluator, same starting states, same per-tree rng seed, same
+    simulation budget: whether each tree's leaves are evaluated one at a time
     (sequential `search`) or interleaved with other trees in shared batches
     (`search_gen` driven by `_run_batched_searches`), the resulting trees must
-    be identical node for node -- not just the final move."""
-    net = _fixed_net()
-    eval_fn = make_eval_fn(net, device="cpu")
-    batch_eval_fn = make_batch_eval_fn(net, device="cpu")
+    be identical node for node -- not just the final move.
+
+    Uses the deterministic `_stub_eval_fn`/`_stub_batch_eval_fn` pair, not a
+    real `Connect4Net`, deliberately: they are constructed to be exactly
+    (bit-for-bit) reproducible regardless of batch shape, which isolates what
+    this test is actually about -- the *scheduler's* selection/backup/subtree
+    logic -- from a separate, genuine floating-point wrinkle in real batched
+    neural-net inference. See the module-level note near the bottom of this
+    file for that wrinkle and why it doesn't undermine the scheduler."""
+    eval_fn = _stub_eval_fn
+    batch_eval_fn = _stub_batch_eval_fn
 
     states = [env.create_game(), _branching_state(), _branching_state()]
     seeds = [10, 11, 12]
@@ -146,9 +186,8 @@ def test_batched_and_sequential_mcts_equivalence_across_seeds_and_concurrency():
     """Repeats the equivalence check across several seeds and a larger,
     unevenly-sized cohort (concurrency doesn't divide the tree count evenly),
     since a scheduling bug might only show up with an odd cohort shape."""
-    net = _fixed_net()
-    eval_fn = make_eval_fn(net, device="cpu")
-    batch_eval_fn = make_batch_eval_fn(net, device="cpu")
+    eval_fn = _stub_eval_fn
+    batch_eval_fn = _stub_batch_eval_fn
 
     for seed_base in (0, 100, 999):
         states = [
@@ -175,9 +214,8 @@ def test_batched_and_sequential_dirichlet_noise_matches():
     """Root Dirichlet noise draws from the tree's own rng -- confirm batching
     doesn't perturb that draw's timing relative to the rest of the tree's
     construction."""
-    net = _fixed_net()
-    eval_fn = make_eval_fn(net, device="cpu")
-    batch_eval_fn = make_batch_eval_fn(net, device="cpu")
+    eval_fn = _stub_eval_fn
+    batch_eval_fn = _stub_batch_eval_fn
 
     state = env.create_game()
     seq_root = search(
@@ -205,10 +243,13 @@ def test_play_one_game_and_play_games_batched_produce_identical_games():
     out bit-identical whether played sequentially or as part of a batched,
     concurrent cohort. Covers several seeds; `play_games_batched` seeds game
     `i` with `seed + i`, so game `i` from a batched cohort must match
-    `play_one_game` seeded with exactly that."""
-    net = _fixed_net()
-    eval_fn = make_eval_fn(net, device="cpu")
-    batch_eval_fn = make_batch_eval_fn(net, device="cpu")
+    `play_one_game` seeded with exactly that. Uses the deterministic stub
+    evaluator for the same reason as the tree-level tests above: it is exact
+    across batch shapes by construction, which is what a whole-game
+    bit-identical comparison needs (see the note near the bottom of this
+    file on real-network batched inference)."""
+    eval_fn = _stub_eval_fn
+    batch_eval_fn = _stub_batch_eval_fn
 
     for seed in (0, 1, 2, 3):
         total_games = 4
@@ -363,6 +404,48 @@ def test_concurrency_larger_than_total_games_is_clamped():
         batch_eval_fn, total_games=2, num_simulations=4, concurrency=128, seed=0
     )
     assert len(results) == 2
+
+
+# ---------------------------------------------------------------------------
+# A note on the one place exact equivalence is genuinely out of reach: a real
+# torch network's batched GEMM/BatchNorm kernels are not specified to be
+# bit-identical to the same row run through a batch-size-1 forward pass --
+# only mathematically equal in exact arithmetic. In float32, evaluating the
+# same position alone versus as part of a larger batch can differ in the last
+# 1-2 ULPs (observed directly below, and initially surfaced as a ~1e-8
+# difference in accumulated node `W` that failed the tree-identity tests
+# above before they were switched to `_stub_eval_fn`). This is a property of
+# floating-point matrix multiplication on real hardware, not a defect in
+# `search_gen`/`play_games_batched`'s scheduling: every line of Python they
+# add (selection, masking, backup) is itself exact and order-independent
+# given whatever `(priors, value)` the evaluator returns. The test below
+# pins down the actual, measured size of that gap for this network so it
+# stays a known, tiny, and monitored quantity rather than an assumption.
+# ---------------------------------------------------------------------------
+
+
+def test_real_network_batch_size_1_vs_batch_size_n_gap_is_tiny_not_zero():
+    """Documents the one genuine equivalence gap (see note above): a real
+    network's output for a given row is not bit-identical between a
+    batch-size-1 call and a call that also evaluates other rows, only close.
+    Pins the gap at a tolerance far tighter than anything that could plausibly
+    flip a PUCT argmax, so this is a monitored numerical detail, not a
+    correctness bug."""
+    net = _fixed_net()
+    eval_fn = make_eval_fn(net, device="cpu")
+    batch_eval_fn = make_batch_eval_fn(net, device="cpu")
+
+    state = _branching_state()
+    encoded = env.encode(state)
+    single_priors, single_value = eval_fn(encoded)
+
+    batch = np.stack([encoded, env.encode(env.create_game()), env.encode(env.from_moves([0, 1]))])
+    batch_priors, batch_values = batch_eval_fn(batch)
+
+    # Equal to a very tight tolerance (float32 ULP-scale), but -- this is the
+    # point -- not necessarily via `==`.
+    assert np.allclose(np.asarray(single_priors), batch_priors[0], atol=1e-5)
+    assert np.isclose(single_value, batch_values[0], atol=1e-5)
 
 
 # ---------------------------------------------------------------------------

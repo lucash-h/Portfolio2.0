@@ -363,7 +363,8 @@
 		t: Transform,
 		fill: string,
 		stroke: string,
-		alpha = 1
+		alpha = 1,
+		lineWidth = 1.4
 	) {
 		const [sx, sy] = toScreen(t, car.x, car.y);
 		ctx.save();
@@ -372,7 +373,7 @@
 		ctx.globalAlpha = alpha;
 		ctx.fillStyle = fill;
 		ctx.strokeStyle = stroke;
-		ctx.lineWidth = 1.4;
+		ctx.lineWidth = lineWidth;
 		ctx.beginPath();
 		if (typeof ctx.roundRect === 'function') {
 			ctx.roundRect(-13, -7, 26, 14, 3);
@@ -555,10 +556,10 @@
 			const rival = cars.find((c) => c.id === 'rival');
 
 			if (player) drawSensorBeams(ctx, player.car, track, t, palette.accent);
-			if (rival) drawCar(ctx, rival.car, t, palette.ghostRival, palette.ghostRivalStroke);
-			if (ghost) drawCar(ctx, ghost.car, t, palette.ghost, palette.ghostStroke);
+			if (rival) drawCar(ctx, rival.car, t, palette.ghostRival, palette.ghostRivalStroke, 1, 1.9);
+			if (ghost) drawCar(ctx, ghost.car, t, palette.ghost, palette.ghostStroke, 1, 1.9);
 			if (player) {
-				drawCar(ctx, player.car, t, palette.accent, palette.accent, playerControlled ? 1 : 0.4);
+				drawCar(ctx, player.car, t, palette.accent, palette.accent, playerControlled ? 1 : 0.75);
 			}
 		}
 

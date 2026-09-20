@@ -34,7 +34,7 @@ from torch import nn
 
 from ml.connect4.net import Connect4Net, count_parameters
 from ml.connect4.replay import ReplayBuffer
-from ml.connect4.selfplay import generate_games
+from ml.connect4.selfplay import DEFAULT_CONCURRENCY, generate_games
 from ml.paths import CHECKPOINTS_DIR
 
 CHECKPOINT_LADDER = (1_000, 10_000, 100_000, 500_000)
@@ -45,6 +45,7 @@ class TrainConfig:
     channels: int = 32
     blocks: int = 4
     workers: int = 2
+    concurrency: int = DEFAULT_CONCURRENCY
     simulations: int = 64
     batch_size: int = 128
     learning_rate: float = 1e-3
@@ -164,6 +165,7 @@ def train(
             games_this_cycle,
             config.simulations,
             workers=config.workers,
+            concurrency=config.concurrency,
             seed=int(rng.integers(0, 2**31 - 1)),
             dirichlet_epsilon=config.dirichlet_epsilon,
             dirichlet_alpha=config.dirichlet_alpha,
@@ -219,6 +221,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default=TrainConfig.simulations,
         help="MCTS simulations per move during self-play.",
     )
+    parser.add_argument(
+        "--concurrency",
+        type=int,
+        default=TrainConfig.concurrency,
+        help="Games stepped in lockstep per self-play worker process, for "
+        "batched leaf evaluation (default: %(default)s). Complements "
+        "--workers: workers controls OS processes/cores, concurrency "
+        "controls the network's forward-pass batch size within each one.",
+    )
     parser.add_argument("--batch-size", type=int, default=TrainConfig.batch_size)
     parser.add_argument("--lr", type=float, default=TrainConfig.learning_rate)
     parser.add_argument(
@@ -265,6 +276,7 @@ def main(argv: list[str] | None = None) -> None:
         channels=args.channels,
         blocks=args.blocks,
         workers=args.workers,
+        concurrency=args.concurrency,
         simulations=args.simulations,
         batch_size=args.batch_size,
         learning_rate=args.lr,

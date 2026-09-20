@@ -54,10 +54,10 @@
 	--color-track-casing: #e2e2d8;
 	--color-track-surface: #f0f0e8;
 	--color-centreline: rgba(22, 24, 26, 0.22);
-	--color-ghost-rival: #f3f0e6;
-	--color-ghost-rival-stroke: rgba(22, 24, 26, 0.28);
+	--color-ghost-rival: #dcdad0;
+	--color-ghost-rival-stroke: rgba(22, 24, 26, 0.55);
 	--color-ghost: #ffffff;
-	--color-ghost-stroke: rgba(22, 24, 26, 0.5);
+	--color-ghost-stroke: rgba(22, 24, 26, 0.75);
 
 	/* Typography */
 	--font-sans: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
@@ -133,10 +133,10 @@
 		--color-track-casing: #24282a;
 		--color-track-surface: #1f2325;
 		--color-centreline: rgba(233, 233, 236, 0.22);
-		--color-ghost-rival: #2b3032;
-		--color-ghost-rival-stroke: rgba(233, 233, 236, 0.28);
-		--color-ghost: #3a4143;
-		--color-ghost-stroke: rgba(233, 233, 236, 0.5);
+		--color-ghost-rival: #3c4346;
+		--color-ghost-rival-stroke: rgba(233, 233, 236, 0.6);
+		--color-ghost: #5a6467;
+		--color-ghost-stroke: rgba(233, 233, 236, 0.85);
 	}
 }
 
@@ -172,8 +172,8 @@
 	--color-track-casing: #24282a;
 	--color-track-surface: #1f2325;
 	--color-centreline: rgba(233, 233, 236, 0.22);
-	--color-ghost-rival: #2b3032;
-	--color-ghost-rival-stroke: rgba(233, 233, 236, 0.28);
-	--color-ghost: #3a4143;
-	--color-ghost-stroke: rgba(233, 233, 236, 0.5);
+	--color-ghost-rival: #3c4346;
+	--color-ghost-rival-stroke: rgba(233, 233, 236, 0.6);
+	--color-ghost: #5a6467;
+	--color-ghost-stroke: rgba(233, 233, 236, 0.85);
 }
