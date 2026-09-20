@@ -15,7 +15,22 @@
  *  - illegal columns are masked by the caller after softmax, not by the net.
  */
 
-import * as ort from 'onnxruntime-web';
+// Type-only import: erased at build time, so it pulls no runtime code.
+import type * as ortTypes from 'onnxruntime-web';
+
+/**
+ * onnxruntime-web is ~400 KB of JavaScript and then fetches a multi-megabyte
+ * WASM binary on first session creation. The front page is the site's landing
+ * page and most visitors will never select a trained checkpoint, so the runtime
+ * is loaded on first actual use rather than on import.
+ *
+ * The promise is cached, so concurrent callers share one module load.
+ */
+let ortPromise: Promise<typeof ortTypes> | null = null;
+function loadOrt(): Promise<typeof ortTypes> {
+	ortPromise ??= import('onnxruntime-web');
+	return ortPromise;
+}
 import { CELL_COUNT, COLS, opponent, type Column, type GameState } from '../games/connect4/types';
 import {
 	CONNECT4_BOARD_SHAPE,
@@ -44,13 +59,13 @@ export interface SessionDeps {
 }
 
 type LoadFailure = { ok: false; reason: MlFailureReason; detail: string };
-type LoadResult = { ok: true; session: ort.InferenceSession } | LoadFailure;
+type LoadResult = { ok: true; session: ortTypes.InferenceSession } | LoadFailure;
 
 // ---------------------------------------------------------------------------
 // Session cache — one InferenceSession per checkpoint id.
 // ---------------------------------------------------------------------------
 
-const sessionCache = new Map<string, ort.InferenceSession>();
+const sessionCache = new Map<string, ortTypes.InferenceSession>();
 
 /** Test/debug hook: forces every checkpoint to be reloaded from scratch. */
 export function clearSessionCache(): void {
@@ -89,6 +104,7 @@ async function loadCheckpointSession(
 	}
 
 	try {
+		const ort = await loadOrt();
 		const session = await ort.InferenceSession.create(new Uint8Array(buffer));
 		sessionCache.set(checkpoint.id, session);
 		return { ok: true, session };
@@ -191,9 +207,10 @@ async function runRaw(
 	if (!loaded.ok) return loaded;
 
 	const board = encodeBoard(state);
+	const ort = await loadOrt();
 	const inputTensor = new ort.Tensor('float32', board, CONNECT4_BOARD_SHAPE as readonly number[]);
 
-	let outputs: ort.InferenceSession.OnnxValueMapType;
+	let outputs: ortTypes.InferenceSession.OnnxValueMapType;
 	try {
 		outputs = await loaded.session.run({ board: inputTensor });
 	} catch (err) {

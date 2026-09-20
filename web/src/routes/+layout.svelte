@@ -1,108 +1,53 @@
 <script lang="ts">
+	/**
+	 * Minimal shell.
+	 *
+	 * The front page is a full-bleed pinned rail, so the layout deliberately adds
+	 * no max-width, padding, header or footer — a constrained `main` would break
+	 * the 100vw panels. Navigation lives in the page itself (a top bar that
+	 * slides in once the rail is behind you), matching the design handoff.
+	 *
+	 * The theme toggle stays here rather than in the page: the design has no slot
+	 * for it, but dark mode is supported, and a control that only appears after
+	 * scrolling past two full screens is not a control anyone will find.
+	 */
 	import '$lib/styles/global.css';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
 
 	let { children } = $props();
-
-	const navLinks = [
-		{ href: '/', label: 'Home' },
-		{ href: '/work', label: 'Work' },
-		{ href: '/lab', label: 'Lab' },
-		{ href: '/about', label: 'About' }
-	];
 </script>
 
 <a href="#main-content" class="skip-link">Skip to content</a>
 
-<div class="page">
-	<header class="site-header">
-		<nav class="site-nav" aria-label="Primary">
-			<a href="/" class="wordmark">Portfolio</a>
-			<ul>
-				{#each navLinks as link (link.href)}
-					<li><a href={link.href}>{link.label}</a></li>
-				{/each}
-			</ul>
-			<ThemeToggle />
-		</nav>
-	</header>
-
-	<main id="main-content">
-		{@render children()}
-	</main>
-
-	<footer class="site-footer">
-		<p>&copy; {new Date().getFullYear()} <!-- PLACEHOLDER: real name goes here --> Lorem Ipsum.</p>
-	</footer>
+<div class="theme-slot">
+	<ThemeToggle />
 </div>
 
+<main id="main-content">
+	{@render children()}
+</main>
+
 <style>
-	.page {
-		min-height: 100vh;
-		display: flex;
-		flex-direction: column;
-	}
-
-	.site-header {
-		border-bottom: var(--border-width) solid var(--color-border);
-	}
-
-	.site-nav {
-		display: flex;
-		align-items: center;
-		gap: var(--space-5);
-		flex-wrap: wrap;
-		max-width: 72rem;
-		margin: 0 auto;
-		padding: var(--space-4) var(--space-4);
-	}
-
-	.wordmark {
-		font-family: var(--font-sans);
-		font-weight: 600;
-		font-size: var(--font-size-md);
-		color: var(--color-text);
-		text-decoration: none;
-		margin-right: auto;
-	}
-
-	.site-nav ul {
-		display: flex;
-		gap: var(--space-4);
-		list-style: none;
-		margin: 0;
-		padding: 0;
-		flex-wrap: wrap;
-	}
-
-	.site-nav a {
-		text-decoration: none;
-		color: var(--color-text);
-		padding: var(--space-2) 0;
-	}
-
-	.site-nav ul a:hover {
-		color: var(--color-accent);
-	}
-
 	main {
-		flex: 1;
+		display: block;
 		width: 100%;
-		max-width: 72rem;
-		margin: 0 auto;
-		padding: var(--space-6) var(--space-4);
 	}
 
-	.site-footer {
-		border-top: var(--border-width) solid var(--color-border);
-		padding: var(--space-5) var(--space-4);
+	.theme-slot {
+		position: fixed;
+		top: clamp(18px, 4vh, 38px);
+		right: clamp(16px, 3vw, 34px);
+		z-index: 70;
 	}
 
-	.site-footer p {
-		max-width: none;
-		margin: 0;
-		font-size: var(--font-size-sm);
-		color: var(--color-text-muted);
-		text-align: center;
+	/* On narrow screens the rail header and the toggle compete for the same
+	   corner, so shrink the toggle rather than let them collide. */
+	@media (max-width: 560px) {
+		.theme-slot {
+			top: 10px;
+			right: 10px;
+			transform: scale(0.85);
+			transform-origin: top right;
+		}
 	}
 </style>

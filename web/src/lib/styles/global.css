@@ -9,6 +9,14 @@
 html {
 	-webkit-text-size-adjust: 100%;
 	text-size-adjust: 100%;
+	/* The top nav links to #work / #about / #contact. */
+	scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	html {
+		scroll-behavior: auto;
+	}
 }
 
 body {
@@ -52,10 +60,17 @@ p {
 	max-width: var(--measure);
 }
 
+/* The design underlines links with a hairline border rather than a text
+   decoration, so the rule sits clear of the descenders. */
 a {
 	color: var(--color-accent);
-	text-decoration-thickness: 1px;
-	text-underline-offset: 0.15em;
+	text-decoration: none;
+	border-bottom: 1px solid var(--color-accent-line);
+}
+
+a:hover {
+	color: var(--color-accent-hover);
+	border-bottom-color: var(--color-accent-hover);
 }
 
 a:hover {
