@@ -2,6 +2,26 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { flushSync, mount, unmount } from 'svelte';
 import type { Manifest, ManifestResult } from '$lib/ml/mlTypes';
 
+/** Controllable stand-in for IntersectionObserver — see visibility.test.ts
+ *  for why: jsdom has none, and driving the real callback's async timing
+ *  isn't the point of this test. */
+class FakeIntersectionObserver {
+	static instances: FakeIntersectionObserver[] = [];
+	private callback: (entries: { isIntersecting: boolean }[]) => void;
+	disconnected = false;
+	constructor(callback: (entries: { isIntersecting: boolean }[]) => void) {
+		this.callback = callback;
+		FakeIntersectionObserver.instances.push(this);
+	}
+	observe(): void {}
+	disconnect(): void {
+		this.disconnected = true;
+	}
+	trigger(isIntersecting: boolean): void {
+		this.callback([{ isIntersecting }]);
+	}
+}
+
 /**
  * Connect4Figure loads the checkpoint manifest on mount via
  * `$lib/ml/registry`. Mocking it keeps these tests deterministic and free of
@@ -107,5 +127,65 @@ describe('Connect4Figure', () => {
 		expect(target.querySelector('.caption')?.textContent).toContain('checkpoints unavailable');
 
 		unmount(component as ReturnType<typeof mount>);
+	});
+
+	describe('off-screen pausing', () => {
+		beforeEach(() => {
+			vi.stubGlobal('IntersectionObserver', FakeIntersectionObserver);
+			vi.useFakeTimers();
+		});
+
+		afterEach(() => {
+			vi.useRealTimers();
+			vi.unstubAllGlobals();
+			FakeIntersectionObserver.instances = [];
+		});
+
+		it('stops scheduling further demo moves once the panel goes off-screen', async () => {
+			const component = mount(Connect4Figure, { target });
+			flushSync();
+			await vi.advanceTimersByTimeAsync(0);
+
+			const io = FakeIntersectionObserver.instances[0];
+			expect(io).toBeDefined();
+
+			// Advancing a couple of demo steps' worth of time while visible
+			// should move the pending-timer count around normally (this is
+			// just establishing the loop is alive before pausing it).
+			await vi.advanceTimersByTimeAsync(900);
+			const pendingBefore = vi.getTimerCount();
+
+			io.trigger(false);
+			await vi.advanceTimersByTimeAsync(0);
+
+			// Once invisible, no new timer should be scheduled no matter how
+			// much wall-clock time passes — the loop is paused, not just slow.
+			const pendingWhilePaused = vi.getTimerCount();
+			await vi.advanceTimersByTimeAsync(20_000);
+			expect(vi.getTimerCount()).toBeLessThanOrEqual(pendingWhilePaused);
+			expect(vi.getTimerCount()).toBeLessThanOrEqual(pendingBefore);
+
+			unmount(component);
+		});
+
+		it('resumes the demo loop when the panel comes back into view', async () => {
+			const component = mount(Connect4Figure, { target });
+			flushSync();
+			await vi.advanceTimersByTimeAsync(0);
+
+			const io = FakeIntersectionObserver.instances[0];
+			io.trigger(false);
+			await vi.advanceTimersByTimeAsync(20_000);
+			expect(vi.getTimerCount()).toBe(0);
+
+			io.trigger(true);
+			await vi.advanceTimersByTimeAsync(0);
+
+			// Coming back into view schedules a fresh step rather than staying
+			// paused forever.
+			expect(vi.getTimerCount()).toBeGreaterThan(0);
+
+			unmount(component);
+		});
 	});
 });

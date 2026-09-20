@@ -12,13 +12,20 @@ CPU. A handful of residual blocks at modest width, not a full ResNet.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 
 import numpy as np
 import torch
 from torch import nn
 
 from ml.connect4.env import COLS, ROWS
+
+# Given a stacked [N,2,6,7] float32 array of encoded positions, returns
+# (priors[N,7], values[N]) -- the batched twin of `ml.connect4.mcts.EvalFn`.
+# Same contract per position: priors are softmaxed (never raw logits, per
+# CONTRACTS §3), values are from the perspective of each position's own
+# player to move.
+BatchEvalFn = Callable[[np.ndarray], tuple[np.ndarray, np.ndarray]]
 
 NUM_PLANES = 2
 DEFAULT_CHANNELS = 32
@@ -120,3 +127,29 @@ def make_eval_fn(net: Connect4Net, device: str | torch.device = "cpu"):
         return priors, v
 
     return eval_fn
+
+
+def make_batch_eval_fn(net: Connect4Net, device: str | torch.device = "cpu") -> BatchEvalFn:
+    """Build a `BatchEvalFn` (per `ml.connect4.net`) from a trained network.
+
+    Takes a stacked `[N,2,6,7]` array (no missing batch axis, unlike
+    `make_eval_fn`'s per-position `[2,6,7]`), runs one forward pass under
+    `torch.no_grad()` in eval mode, applies softmax to the policy logits, and
+    returns `(priors[N,7], values[N])` as plain numpy arrays. This is the
+    batched leaf evaluator used to speed up self-play (see
+    `ml.connect4.selfplay.play_games_batched`): for the same weights and the
+    same input row, it produces the same numbers as `make_eval_fn` produces
+    for that row alone -- see `test_batching.py`.
+    """
+    net = net.to(device)
+    net.eval()
+
+    def batch_eval_fn(encoded_batch: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        with torch.no_grad():
+            x = torch.from_numpy(encoded_batch).to(device=device, dtype=torch.float32)
+            policy_logits, value = net(x)
+            priors = torch.softmax(policy_logits, dim=-1).cpu().numpy()
+            values = value[:, 0].cpu().numpy()
+        return priors, values
+
+    return batch_eval_fn

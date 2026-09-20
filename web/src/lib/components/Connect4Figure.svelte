@@ -27,10 +27,11 @@
 	 */
 	import { createGame, legalMoves, applyMove, isTerminal } from '$lib/games/connect4/engine';
 	import { ROWS, COLS, idx, type Column, type GameState } from '$lib/games/connect4/types';
-	import { chooseMove } from '$lib/ml/session';
+	import { chooseMoveOffThread, disposeInferWorker } from '$lib/ml/inferClient';
 	import { loadManifest, getConnect4Checkpoints } from '$lib/ml/registry';
 	import type { Connect4CheckpointEntry } from '$lib/ml/mlTypes';
 	import { chooseMoveAsync, disposeMinimaxWorker } from '$lib/games/connect4/minimaxClient';
+	import { observeVisibility, type VisibilityHandle } from '$lib/util/visibility';
 
 	interface Props {
 		/** Fires when a game ends, so the page can POST /api/games and bump its counter. */
@@ -67,6 +68,7 @@
 	let fallbackNote = $state('');
 
 	let columnButtons: (HTMLButtonElement | null)[] = [];
+	let rootEl: HTMLDivElement | null = null;
 
 	// Guards against stale async work (from a previous round or after unmount)
 	// applying a move to a board that has since moved on.
@@ -78,10 +80,79 @@
 	let fallTimer: ReturnType<typeof setTimeout> | undefined;
 	let gameStartedAt = 0;
 
+	// Off-screen / backgrounded-tab pause (see $lib/util/visibility). `visible`
+	// gates whether the demo loop and bot replies are allowed to schedule more
+	// work or apply a move an in-flight inference already computed. `frozen`
+	// remembers, while paused, what kind of step to resume with — a fresh
+	// delay, never the elapsed wall-clock time, so coming back on screen never
+	// fast-forwards the game.
+	let visible = true;
+	let visibilityHandle: VisibilityHandle | null = null;
+	type ScheduledKind = 'demo' | 'bot' | 'end';
+	let frozen: { kind: ScheduledKind; delay: number } | null = null;
+	/** The delay each kind of timer was actually scheduled with, so a freeze
+	 *  captured mid-wait resumes with the same delay it started with (e.g. a
+	 *  human takeover's shorter bot delay), not a hardcoded default. */
+	const lastDelay: Partial<Record<ScheduledKind, number>> = {};
+
 	const terminalNow = $derived(isTerminal(game));
 	const legalSet = $derived(new Set(legalMoves(game)));
 
 	function clearScheduled(): void {
+		clearTimeout(demoTimer);
+		clearTimeout(botTimer);
+		clearTimeout(endTimer);
+		demoTimer = undefined;
+		botTimer = undefined;
+		endTimer = undefined;
+		frozen = null;
+	}
+
+	/** Runs `runDemoStep` / `runBotReply` / `performReset` after `delay`ms,
+	 *  tracking which timer variable owns the handle so `clearScheduled` can
+	 *  cancel it. Called both for normal scheduling and to resume a `frozen`
+	 *  step after the panel becomes visible again. */
+	function schedule(kind: ScheduledKind, delay: number): void {
+		const myEpoch = epoch;
+		const run = () => {
+			if (kind === 'demo') void runDemoStep(myEpoch);
+			else if (kind === 'bot') void runBotReply(myEpoch);
+			else performReset(myEpoch);
+		};
+		lastDelay[kind] = delay;
+		const timer = setTimeout(run, delay);
+		if (kind === 'demo') demoTimer = timer;
+		else if (kind === 'bot') botTimer = timer;
+		else endTimer = timer;
+	}
+
+	function performReset(myEpoch: number): void {
+		if (myEpoch !== epoch || destroyed) return;
+		game = createGame();
+		policy = new Array(COLS).fill(0);
+		fallingDisc = null;
+		gameStartedAt = performance.now();
+		if (mode === 'demo') {
+			void runDemoStep(myEpoch);
+		}
+	}
+
+	/** Called whenever the combined off-screen/backgrounded signal flips. */
+	function onVisibilityChange(v: boolean): void {
+		visible = v;
+		if (v) {
+			if (frozen) {
+				const f = frozen;
+				frozen = null;
+				schedule(f.kind, f.delay);
+			}
+			return;
+		}
+		// Going invisible: capture whichever timer is currently pending so it
+		// can be resumed with the same (not elapsed) delay, then cancel it.
+		if (demoTimer !== undefined) frozen = { kind: 'demo', delay: lastDelay.demo ?? DEMO_STEP_DELAY_MS };
+		else if (botTimer !== undefined) frozen = { kind: 'bot', delay: lastDelay.bot ?? HUMAN_BOT_DELAY_MS };
+		else if (endTimer !== undefined) frozen = { kind: 'end', delay: lastDelay.end ?? END_OF_GAME_DELAY_MS };
 		clearTimeout(demoTimer);
 		clearTimeout(botTimer);
 		clearTimeout(endTimer);
@@ -113,7 +184,7 @@
 		})();
 
 		gameStartedAt = performance.now();
-		demoTimer = setTimeout(() => void runDemoStep(myEpoch), DEMO_INITIAL_DELAY_MS);
+		schedule('demo', DEMO_INITIAL_DELAY_MS);
 
 		return () => {
 			destroyed = true;
@@ -121,6 +192,16 @@
 			clearScheduled();
 			clearTimeout(fallTimer);
 			disposeMinimaxWorker();
+			disposeInferWorker();
+		};
+	});
+
+	$effect(() => {
+		if (!rootEl) return;
+		visibilityHandle = observeVisibility(rootEl, onVisibilityChange);
+		return () => {
+			visibilityHandle?.dispose();
+			visibilityHandle = null;
 		};
 	});
 
@@ -177,7 +258,7 @@
 		const legal = legalMoves(g);
 		if (checkpoint) {
 			const t0 = performance.now();
-			const result = await chooseMove(checkpoint, g, legal, { mode: 'greedy' });
+			const result = await chooseMoveOffThread(checkpoint, g, legal, { mode: 'greedy' });
 			const elapsedMs = performance.now() - t0;
 			if (result.ok) {
 				onLatency?.(elapsedMs);
@@ -236,17 +317,7 @@
 			durationMs: performance.now() - gameStartedAt
 		});
 
-		const myEpoch = epoch;
-		endTimer = setTimeout(() => {
-			if (myEpoch !== epoch || destroyed) return;
-			game = createGame();
-			policy = new Array(COLS).fill(0);
-			fallingDisc = null;
-			gameStartedAt = performance.now();
-			if (mode === 'demo') {
-				void runDemoStep(myEpoch);
-			}
-		}, END_OF_GAME_DELAY_MS);
+		schedule('end', END_OF_GAME_DELAY_MS);
 	}
 
 	async function runDemoStep(myEpoch: number): Promise<void> {
@@ -256,6 +327,13 @@
 		const checkpoint = game.toMove === HUMAN_PLAYER ? demoCheckpoint() : botCheckpoint();
 		const { col, policy: p } = await pickMove(checkpoint, game);
 		if (myEpoch !== epoch || destroyed || mode !== 'demo') return;
+		if (!visible) {
+			// Went off-screen mid-inference: drop the move we just computed
+			// rather than apply it, and wait to be resumed instead of
+			// starting another inference immediately.
+			frozen = { kind: 'demo', delay: DEMO_STEP_DELAY_MS };
+			return;
+		}
 		if (!legalMoves(game).includes(col)) return;
 
 		applyGameMove(col, p);
@@ -263,7 +341,7 @@
 		if (isTerminal(game)) {
 			handleGameEnd();
 		} else {
-			demoTimer = setTimeout(() => void runDemoStep(myEpoch), DEMO_STEP_DELAY_MS);
+			schedule('demo', DEMO_STEP_DELAY_MS);
 		}
 	}
 
@@ -289,8 +367,7 @@
 			return;
 		}
 
-		const myEpoch = epoch;
-		botTimer = setTimeout(() => void runBotReply(myEpoch), botDelay);
+		schedule('bot', botDelay);
 	}
 
 	async function runBotReply(myEpoch: number): Promise<void> {
@@ -300,6 +377,10 @@
 		const checkpoint = botCheckpoint();
 		const { col, policy: p } = await pickMove(checkpoint, game);
 		if (myEpoch !== epoch || destroyed || mode !== 'human') return;
+		if (!visible) {
+			frozen = { kind: 'bot', delay: HUMAN_BOT_DELAY_MS };
+			return;
+		}
 		if (!legalMoves(game).includes(col)) return;
 
 		applyGameMove(col, p);
@@ -334,8 +415,7 @@
 		fallingDisc = null;
 		announcement = 'New game started.';
 		gameStartedAt = performance.now();
-		const myEpoch = epoch;
-		demoTimer = setTimeout(() => void runDemoStep(myEpoch), DEMO_STEP_DELAY_MS);
+		schedule('demo', DEMO_STEP_DELAY_MS);
 	}
 
 	function moveCursor(delta: number): void {
@@ -379,7 +459,7 @@
 	}
 </script>
 
-<div class="fig1">
+<div class="fig1" bind:this={rootEl}>
 	<div class="policy-bars" aria-hidden="true">
 		{#each Array(COLS) as _, col (col)}
 			{@const p = policy[col] ?? 0}

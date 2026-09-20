@@ -66,6 +66,24 @@ function installFetchStub() {
 	})) as unknown as typeof fetch;
 }
 
+/** Controllable stand-in for IntersectionObserver — jsdom has none. */
+class FakeIntersectionObserver {
+	static instances: FakeIntersectionObserver[] = [];
+	private callback: (entries: { isIntersecting: boolean }[]) => void;
+	disconnected = false;
+	constructor(callback: (entries: { isIntersecting: boolean }[]) => void) {
+		this.callback = callback;
+		FakeIntersectionObserver.instances.push(this);
+	}
+	observe(): void {}
+	disconnect(): void {
+		this.disconnected = true;
+	}
+	trigger(isIntersecting: boolean): void {
+		this.callback([{ isIntersecting }]);
+	}
+}
+
 /** Flush the microtask queue enough times for the component's async mount
  *  effect (fetch -> parseTrack -> spawn cars -> wire listeners) to settle. */
 async function flushAsyncEffects() {
@@ -150,6 +168,37 @@ describe('RacerCanvas', () => {
 		const removedTypes = removeSpy.mock.calls.map((c) => c[0]);
 		expect(removedTypes).toContain('keydown');
 		expect(removedTypes).toContain('keyup');
+	});
+
+	it('stops requesting animation frames once the panel goes off-screen, and resumes on return', async () => {
+		vi.stubGlobal('IntersectionObserver', FakeIntersectionObserver);
+		const rafSpy = vi.spyOn(window, 'requestAnimationFrame');
+		const cancelSpy = vi.spyOn(window, 'cancelAnimationFrame');
+
+		const component = mount(RacerCanvas, { target, props: {} });
+		flushSync();
+		await flushAsyncEffects();
+
+		const io = FakeIntersectionObserver.instances[0];
+		expect(io).toBeDefined();
+		expect(rafSpy.mock.calls.length).toBeGreaterThan(0);
+
+		io.trigger(false);
+		// Let any already-in-flight frame land.
+		await new Promise((r) => setTimeout(r, 50));
+		const callsRightAfterPause = rafSpy.mock.calls.length;
+		expect(cancelSpy).toHaveBeenCalled();
+
+		// No further frames should be requested while paused, no matter how
+		// much real time passes.
+		await new Promise((r) => setTimeout(r, 150));
+		expect(rafSpy.mock.calls.length).toBe(callsRightAfterPause);
+
+		io.trigger(true);
+		await new Promise((r) => setTimeout(r, 50));
+		expect(rafSpy.mock.calls.length).toBeGreaterThan(callsRightAfterPause);
+
+		unmount(component);
 	});
 
 	it('reports a load error in the DOM if the track fetch fails, instead of throwing', async () => {

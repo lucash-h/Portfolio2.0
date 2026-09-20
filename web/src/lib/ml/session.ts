@@ -25,10 +25,27 @@ import type * as ortTypes from 'onnxruntime-web';
  * is loaded on first actual use rather than on import.
  *
  * The promise is cached, so concurrent callers share one module load.
+ *
+ * Importing the `/wasm` subpath (rather than the package root) selects the
+ * plain SIMD WASM build (`ort-wasm-simd-threaded.wasm`, ~13.6 MB) instead of
+ * the default JSEP build (`ort-wasm-simd-threaded.jsep.wasm`, ~27 MB), which
+ * carries WebGPU support this 88,600-parameter CNN never uses. Verified by
+ * grepping the built bundles: `ort.bundle.min.mjs` (the package root's
+ * default export) references only the `.jsep.wasm` filename, while
+ * `ort.wasm.bundle.min.mjs` (what `/wasm` resolves to) references only the
+ * plain `.wasm` filename — confirmed against the actual built output in
+ * `build/client` (see the PR/task notes for the before/after sizes observed).
  */
 let ortPromise: Promise<typeof ortTypes> | null = null;
 function loadOrt(): Promise<typeof ortTypes> {
-	ortPromise ??= import('onnxruntime-web');
+	ortPromise ??= import('onnxruntime-web/wasm').then((ort) => {
+		// Threaded WASM needs cross-origin-isolation (COOP/COEP) headers this
+		// site does not send, so onnxruntime-web would silently fall back to
+		// a single thread after trying to spin up a thread pool anyway.
+		// Pin it explicitly so there's no pointless spin-up attempt.
+		ort.env.wasm.numThreads = 1;
+		return ort;
+	});
 	return ortPromise;
 }
 import { CELL_COUNT, COLS, opponent, type Column, type GameState } from '../games/connect4/types';

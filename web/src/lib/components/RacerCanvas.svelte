@@ -48,6 +48,7 @@
 	} from '$lib/games/racer/track';
 	import { parseTrack } from '$lib/games/racer/validateTrack';
 	import type { CarState, ControlInput, RaceState, Track } from '$lib/games/racer/types';
+	import { observeVisibility, type VisibilityHandle } from '$lib/util/visibility';
 
 	interface Props {
 		/** Path under `static/` to the track JSON. Defaults to the oval. */
@@ -398,7 +399,8 @@
 			keyup: null as ((e: KeyboardEvent) => void) | null,
 			resizeObserver: null as ResizeObserver | null,
 			themeQuery: null as MediaQueryList | null,
-			themeListener: null as (() => void) | null
+			themeListener: null as (() => void) | null,
+			visibility: null as VisibilityHandle | null
 		};
 
 		const pressed: Record<string, boolean> = {};
@@ -410,6 +412,41 @@
 		let lastHudCommit = 0;
 		let lastFrameTime = 0;
 		let accumulator = 0;
+
+		// Off-screen / backgrounded-tab pause (see $lib/util/visibility).
+		// `desiredRunning` is "should the sim be looping according to the
+		// existing reduced-motion/start-prompt gating, ignoring visibility" —
+		// true once the loop has actually been started by either the normal
+		// path or a keypress out of the reduced-motion start prompt.
+		// `offscreenOrHidden` is the pause signal. The rAF loop only actually
+		// runs when both agree it should.
+		let desiredRunning = false;
+		let offscreenOrHidden = false;
+
+		function startLoop(): void {
+			if (ctl.raf) return;
+			// Reset, never fast-forward: a frame after a pause must not
+			// integrate the wall-clock time that passed while paused into one
+			// huge physics step.
+			lastFrameTime = 0;
+			accumulator = 0;
+			ctl.raf = requestAnimationFrame(runFrame);
+		}
+
+		function stopLoop(): void {
+			if (ctl.raf) {
+				cancelAnimationFrame(ctl.raf);
+				ctl.raf = 0;
+			}
+			// Paused but not blank: redraw the last known state once so a
+			// resize or first paint while paused never leaves the canvas empty.
+			draw();
+		}
+
+		function syncRunning(): void {
+			if (desiredRunning && !offscreenOrHidden) startLoop();
+			else stopLoop();
+		}
 
 		function resizeCanvas() {
 			if (!canvasEl || !frameEl) return;
@@ -559,9 +596,9 @@
 				if (!playerControlled) playerControlled = true;
 				if (showStartPrompt) {
 					showStartPrompt = false;
-					if (reducedMotion && !ctl.raf) {
-						lastFrameTime = 0;
-						ctl.raf = requestAnimationFrame(runFrame);
+					if (reducedMotion && !desiredRunning) {
+						desiredRunning = true;
+						syncRunning();
 					}
 				}
 			}
@@ -589,8 +626,22 @@
 
 			resizeCanvas();
 			if (frameEl && 'ResizeObserver' in window) {
-				ctl.resizeObserver = new ResizeObserver(() => resizeCanvas());
+				ctl.resizeObserver = new ResizeObserver(() => {
+					resizeCanvas();
+					// A resize clears the backing store; if the loop isn't
+					// currently running (paused off-screen, or still waiting
+					// on the reduced-motion start prompt) redraw once so the
+					// panel doesn't go blank until the loop resumes.
+					if (!ctl.raf) draw();
+				});
 				ctl.resizeObserver.observe(frameEl);
+			}
+
+			if (frameEl) {
+				ctl.visibility = observeVisibility(frameEl, (v) => {
+					offscreenOrHidden = !v;
+					syncRunning();
+				});
 			}
 
 			reducedMotion =
@@ -628,7 +679,8 @@
 				showStartPrompt = true;
 				draw();
 			} else {
-				ctl.raf = requestAnimationFrame(runFrame);
+				desiredRunning = true;
+				syncRunning();
 			}
 		})();
 
@@ -638,6 +690,7 @@
 			if (ctl.keydown) window.removeEventListener('keydown', ctl.keydown);
 			if (ctl.keyup) window.removeEventListener('keyup', ctl.keyup);
 			if (ctl.resizeObserver) ctl.resizeObserver.disconnect();
+			ctl.visibility?.dispose();
 			restartHandler = null;
 		};
 	});

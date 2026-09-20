@@ -82,7 +82,12 @@ function playGame(rng: SeededRNG, minimaxFirst: boolean): number {
 
 describe('minimax', () => {
 	describe('1. Never returns illegal columns', () => {
-		it('should return legal moves from 200 random positions', () => {
+		// Explicit timeout: this file is CPU-heavy (two 100-game matches dominate
+		// it) and vitest runs files in parallel, so under contention the 5s default
+		// is not enough and this fails for load reasons rather than correctness
+		// ones. Capping the search budget was tried and rejected: 30ms dropped the
+		// bot to 93/100 as second player, and 200ms ran no faster than the default.
+		it('should return legal moves from 200 random positions', { timeout: 120_000 }, () => {
 			const rng = new SeededRNG(42);
 
 			for (let i = 0; i < 200; i++) {

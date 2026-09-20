@@ -13,7 +13,7 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Generator, Sequence
 
 import numpy as np
 
@@ -71,11 +71,11 @@ def _terminal_value(state: GameState) -> float:
     return 0.0
 
 
-def _expand(node: Node, eval_fn: EvalFn) -> float:
-    """Evaluate `node` with `eval_fn`, create its children, and return the
-    value from the perspective of `node.state.to_move`. Assumes `node.state` is
-    not terminal."""
-    raw_priors, value = eval_fn(encode(node.state))
+def _finish_expand(node: Node, raw_priors: Sequence[float], value: float) -> float:
+    """Shared tail of expansion, used by both the direct (`eval_fn`-calling)
+    and generator (batched-evaluator) paths: mask/renormalise priors over
+    legal columns, create children, mark expanded, and return the value as a
+    plain float. Assumes `node.state` is not terminal."""
     raw_priors = np.asarray(raw_priors, dtype=np.float64)
 
     legal = legal_moves(node.state)
@@ -96,6 +96,14 @@ def _expand(node: Node, eval_fn: EvalFn) -> float:
 
     node.is_expanded = True
     return float(value)
+
+
+def _expand(node: Node, eval_fn: EvalFn) -> float:
+    """Evaluate `node` with `eval_fn`, create its children, and return the
+    value from the perspective of `node.state.to_move`. Assumes `node.state` is
+    not terminal."""
+    raw_priors, value = eval_fn(encode(node.state))
+    return _finish_expand(node, raw_priors, value)
 
 
 def _backup(node: Node, value: float) -> None:
@@ -134,6 +142,75 @@ def _simulate(root: Node, eval_fn: EvalFn, c_puct: float) -> None:
 
     value = _terminal_value(node.state) if is_terminal(node.state) else _expand(node, eval_fn)
     _backup(node, value)
+
+
+# `(priors, value)` sent back into a suspended `_simulate_gen`/`search_gen`
+# generator to resume it after a batched evaluation.
+EvalResult = tuple[Sequence[float], float]
+
+
+def _simulate_gen(root: Node, c_puct: float) -> Generator[np.ndarray, EvalResult, None]:
+    """Generator twin of `_simulate`, for batched leaf evaluation.
+
+    Identical selection/backup logic to `_simulate` — same helper functions,
+    called in the same order — so driving this generator to completion with
+    `(priors, value)` from an evaluator produces exactly the same tree
+    mutation as calling `_simulate` with the per-position `EvalFn` that would
+    have returned that same `(priors, value)`. The only difference is that a
+    non-terminal leaf `yield`s its encoded `[2,6,7]` position instead of
+    calling `eval_fn` directly, so a caller can suspend here, batch this
+    position with others, and `.send()` the result back in. A terminal leaf
+    resolves immediately and never yields, so terminal positions never occupy
+    a batch slot.
+    """
+    node = root
+    while node.is_expanded and not is_terminal(node.state):
+        node = _select_child(node, c_puct)
+
+    if is_terminal(node.state):
+        value = _terminal_value(node.state)
+    else:
+        raw_priors, value = yield encode(node.state)
+        value = _finish_expand(node, raw_priors, value)
+    _backup(node, value)
+
+
+def search_gen(
+    root: Node | GameState,
+    num_simulations: int,
+    *,
+    c_puct: float = DEFAULT_C_PUCT,
+    dirichlet_epsilon: float = 0.0,
+    dirichlet_alpha: float = 0.3,
+    rng: np.random.Generator | None = None,
+) -> Generator[np.ndarray, EvalResult, Node]:
+    """Generator twin of `search`, for batched leaf evaluation.
+
+    Mirrors `search`'s control flow line for line (same helpers, same order),
+    delegating each simulation to `_simulate_gen` via `yield from`. Driven to
+    completion — resumed with `(priors, value)` for every position it yields,
+    in the order it yields them — this produces the identical `Node` tree
+    `search` would have produced by calling an `EvalFn` that returned those
+    same `(priors, value)` pairs. Returns the (possibly newly created) root
+    node, available as the generator's `StopIteration.value` (or via
+    `yield from search_gen(...)` in a caller that is itself a generator).
+    """
+    node = root if isinstance(root, Node) else Node(root)
+
+    if num_simulations <= 0 or is_terminal(node.state):
+        return node
+
+    remaining = num_simulations
+    if not node.is_expanded:
+        yield from _simulate_gen(node, c_puct)
+        remaining -= 1
+        if dirichlet_epsilon > 0:
+            add_dirichlet_noise(node, dirichlet_epsilon, dirichlet_alpha, rng)
+
+    for _ in range(remaining):
+        yield from _simulate_gen(node, c_puct)
+
+    return node
 
 
 def add_dirichlet_noise(
