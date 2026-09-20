@@ -131,33 +131,121 @@ Steps 1–4 are the engineering. Steps 5–7 are mostly waiting.
 
 ---
 
-## 8. UI: from exhibit to game
+## 8. UI — settled, no work needed
 
-The front page figure is a *showcase* — it self-plays, and clicking takes over. That is the
-right behaviour for a landing page and should stay.
+An earlier draft of this section argued for a dedicated play route: the board squeezed into
+half a rail panel, arrow keys contested, nowhere to put analysis.
 
-But "the visitor plays the bot" is a different job, and the rail panel is a bad place for
-it: the board is squeezed into half a panel, the horizontal rail competes for arrow keys,
-and there is no room for anything around the board.
+**Lucas tried it and it plays fine as-is.** The takeover flow already does the right thing —
+the figure self-plays, clicking a column drops your token, the bot replies, and it
+alternates from there. The layout stays exactly as built.
 
-### What a real play mode needs
+So there is no UI work in this plan. Ideas that were in the earlier draft and are *not*
+being built unless asked for later:
 
-- **A focused board.** Full width, no rail, no scroll driver stealing keys.
-- **A difficulty picker that means something** — checkpoint label plus Elo and games
-  trained, so choosing a tier is an informed choice.
-- **Win probability from the value head.** We already compute it and currently throw it
-  away. A live bar reading "the network thinks it is winning 68%" is the single clearest
-  way to show there is a real model here, and it costs nothing.
-- **Post-game analysis.** Replay the game move by move with the network's evaluation at
-  each step, flagging the move where the evaluation swung hardest against you. This is the
-  feature that turns a game into a portfolio piece — it demonstrates the value head, the
-  policy head and the training story in one screen.
-- **Result tracking** across games in the session, and logged via the existing
-  `POST /api/games`.
-- **A layout that works on a phone**, where a 100vh rail panel currently does not leave
-  room for a board plus controls.
+- a dedicated full-width play route
+- a live win-probability bar from the value head
+- post-game move-by-move analysis
 
-### Where it lives
+They are recorded here only so the reasoning is not lost. The value head is still computed
+and currently discarded, so the win-probability bar remains cheap if it is ever wanted.
 
-Open question for Lucas — see the summary. Either a dedicated route linked from the front
-page figure, or a fullscreen mode that expands out of the existing panel.
+---
+
+## 9. Other approaches worth demonstrating
+
+Self-play is the right algorithm here and should stay the headline. But several
+alternatives are worth building *as exhibits* — not because they would produce a stronger
+bot, but because the comparison is the interesting part. A portfolio that shows one method
+working says "I followed a recipe". One that shows several and explains why this one won
+says something rather different.
+
+Ordered by payoff per unit of effort.
+
+### 9.1 The solver as a measuring instrument — do this one
+
+Connect 4 is **solved**: with perfect play the first player wins. A perfect player is
+alpha-beta with transposition tables and an opening book, and it is not much code.
+
+As an *opponent* it is useless — unbeatable is not fun, and there is no learning story. As
+a **ruler** it is the most valuable thing on this list:
+
+> For each checkpoint, sample N positions and report the fraction of its moves that match
+> optimal play, and the average value it gives up per move against ground truth.
+
+"Checkpoint 4 plays the optimal move 87% of the time" is an absolute, falsifiable claim.
+Elo against its own ancestors is relative and can drift — a ladder can look beautifully
+monotonic while the whole population is mediocre. Measuring against truth cannot flatter
+itself.
+
+It also dissolves the evaluation problem from §4: no randomised openings, no gating
+matches, no worrying that a deterministic 60-game match is really two games repeated
+thirty times. Just compare against the correct answer.
+
+**Effort:** moderate. **Payoff:** the single best number this project could put on a page.
+
+### 9.2 Ablations — cheap, and unusually legible
+
+Same architecture, same budget, one thing removed. Each is a short run and each answers a
+question a reader will actually have:
+
+| Ablation | What it shows |
+|---|---|
+| Policy head only, no search at play time | How much of the strength is MCTS rather than the network |
+| No value head (rollouts instead) | Whether the learned evaluation is earning its place |
+| No Dirichlet noise at the root | Exploration collapse — usually dramatic and easy to see |
+| No mirror-symmetry augmentation | What 2x effective data is worth |
+
+The first is the most interesting: **search and network strength are separable**, and
+showing the gap between "network alone" and "network plus 400 simulations" is the clearest
+possible demonstration of what MCTS contributes. It is also nearly free, since both modes
+already exist in the code.
+
+**Effort:** low. **Payoff:** high, because each one is a single honest graph.
+
+### 9.3 Supervised distillation from the solver — the instructive contrast
+
+Generate positions, label them with the solver's optimal move and value, train the same
+network by imitation. No MCTS in the loop, and it converges far faster than self-play.
+
+The contrast is the point: **identical architecture, two completely different data
+sources.** Self-play discovers; distillation copies. Plot both learning curves on the same
+axes and the difference in sample efficiency — and in what each one gets wrong — is the
+whole lesson.
+
+Also pragmatic: it makes a good warm start. Distil first to skip the slow early phase,
+then hand off to self-play.
+
+**Effort:** low once the solver exists. **Payoff:** high, and it reuses §9.1's work.
+
+### 9.4 A second paradigm on the same game
+
+The racer already uses neuroevolution. Running it on **Connect 4 as well** gives a direct
+comparison that is rare in portfolios: one game, two learning paradigms, one Elo scale.
+
+Evolution will lose, and losing is fine — the honest finding that gradient-based
+self-play with search is far more sample-efficient for a perfect-information board game is
+a better result than a contrived tie.
+
+**Effort:** moderate. **Payoff:** good, mostly as narrative.
+
+### 9.5 Methods not worth building here
+
+Recorded so the choice is visibly deliberate rather than an omission:
+
+- **PPO / policy gradient** — model-free, no search. Higher variance and much more
+  sample-hungry on this class of game; would end up weaker than what already exists.
+- **DQN** — needs self-play and careful perspective handling anyway, and is generally
+  beaten by search-based methods on perfect-information games.
+- **MuZero** — learns a model of the dynamics. Pointless when the rules are known exactly.
+- **TD-learning with shallow search** — how backgammon was cracked, cheap, works. Mostly
+  of historical interest here, and §9.2's ablations already cover the "is the value head
+  pulling its weight" question more directly.
+
+### Suggested order
+
+`9.1` (solver + optimality metric) → `9.2` (ablations, which it enables) → `9.3`
+(distillation, which reuses it) → `9.4` if there is appetite.
+
+All three of the first items share one piece of work: **building the solver.** That is the
+dependency worth paying for.
