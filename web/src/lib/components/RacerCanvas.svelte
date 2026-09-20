@@ -182,8 +182,14 @@
 
 	const rivalTierIndex = $derived(selectedTierIndex === 0 ? 1 : 0);
 
-	let canvasEl: HTMLCanvasElement | null = null;
-	let frameEl: HTMLDivElement | null = null;
+	// These MUST be `$state`. The mount effect below opens with
+	// `if (!canvasEl) return`, and an effect only re-runs when a *reactive* read
+	// changes. As plain `let` bindings, an effect that ran before `bind:this`
+	// assigned would bail out and never run again — no track fetch, no cars, no
+	// draw, and no error either, because the early return happens before any of
+	// the loading code. The canvas just stays blank forever.
+	let canvasEl = $state<HTMLCanvasElement | null>(null);
+	let frameEl = $state<HTMLDivElement | null>(null);
 
 	/** Set by the mount effect once the sim is running; the "restart lap"
 	 *  button (outside the effect's closure) calls through this indirection
