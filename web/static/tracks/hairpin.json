@@ -1,0 +1,26 @@
+{
+  "name": "Hairpin Challenge",
+  "description": "Extreme technical track with tight hairpin turns (R ≈ 5.5m) that push the car's steering limits, separated by acceleration zones. A masterclass in threshold braking and maximum steering angle control.",
+  "centreline": [
+    [0, 0],
+    [12, 0],
+    [24, 2],
+    [34, 8],
+    [42, 18],
+    [46, 30],
+    [46, 42],
+    [42, 52],
+    [34, 60],
+    [24, 64],
+    [12, 64],
+    [2, 60],
+    [-4, 52],
+    [-6, 42],
+    [-6, 30],
+    [-2, 18],
+    [6, 8],
+    [16, 2]
+  ],
+  "halfWidth": 4,
+  "startIndex": 0
+}

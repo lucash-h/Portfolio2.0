@@ -1,0 +1,20 @@
+{
+  "name": "Oval Basin",
+  "description": "Gentle oval circuit testing basic speed and smooth cornering. Large radius curves (R ≈ 10m) are well within the car's capabilities, making this the ideal first track.",
+  "centreline": [
+    [0, 0],
+    [15, 5],
+    [25, 15],
+    [30, 30],
+    [25, 45],
+    [15, 55],
+    [0, 60],
+    [-15, 55],
+    [-25, 45],
+    [-30, 30],
+    [-25, 15],
+    [-15, 5]
+  ],
+  "halfWidth": 8,
+  "startIndex": 0
+}

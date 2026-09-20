@@ -1,0 +1,26 @@
+{
+  "name": "Technical Circuit",
+  "description": "Mixed-radius track with a chicane and tighter corners (R ≈ 6-7m). Tests brake performance, precise steering, and racing line management through technical sections.",
+  "centreline": [
+    [0, 0],
+    [20, 0],
+    [35, 5],
+    [42, 15],
+    [42, 30],
+    [40, 42],
+    [30, 48],
+    [18, 48],
+    [10, 42],
+    [8, 30],
+    [10, 18],
+    [12, 12],
+    [8, 6],
+    [3, 6],
+    [0, 10],
+    [-8, 12],
+    [-12, 8],
+    [-10, 0]
+  ],
+  "halfWidth": 6,
+  "startIndex": 0
+}
