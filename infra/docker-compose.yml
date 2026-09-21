@@ -9,6 +9,12 @@ services:
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-portfolio}
       - PORT=${PORT:-3000}
+      # adapter-node otherwise reports the address it is bound to inside the
+      # container (http://localhost:3000), which would put localhost into every
+      # canonical URL and link-preview image on the public site. These two make
+      # it trust the forwarding headers Caddy already sets.
+      - PROTOCOL_HEADER=x-forwarded-proto
+      - HOST_HEADER=x-forwarded-host
     restart: unless-stopped
     networks:
       - app

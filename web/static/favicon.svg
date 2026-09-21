@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="Lucas">
+  <!--
+    The "L" of the site wordmark, drawn as two bars so it needs no webfont and
+    stays legible at 16px. The tile carries its own background: a bare glyph
+    would vanish against whichever browser chrome it lands on. Colours are the
+    tokens from src/lib/styles/tokens.css, light values first, with the dark
+    pair applied when the browser reports a dark UI (supported for SVG
+    favicons in Chrome and Firefox; others simply keep the light tile, which
+    is still correct, just not matched to the chrome).
+  -->
+  <style>
+    .tile { fill: #f6f6f2; }
+    .mark { fill: #0f6e51; }
+    @media (prefers-color-scheme: dark) {
+      .tile { fill: #16181a; }
+      .mark { fill: #4fd1a5; }
+    }
+  </style>
+  <rect class="tile" width="100" height="100"/>
+  <rect class="mark" x="24" y="12" width="20" height="76"/>
+  <rect class="mark" x="24" y="68" width="54" height="20"/>
+</svg>

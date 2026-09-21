@@ -10,9 +10,32 @@
 	 * links are stand-ins for layout testing. Every one is marked below. None of
 	 * it describes real projects or real accounts.
 	 */
+	import { page } from '$app/state';
 	import GameRail from '$lib/components/GameRail.svelte';
 	import Connect4Figure from '$lib/components/Connect4Figure.svelte';
 	import RacerCanvas from '$lib/components/RacerCanvas.svelte';
+
+	// ---------------------------------------------------------------------
+	// Page metadata and link previews.
+	//
+	// The absolute URLs come from the request rather than a hardcoded domain,
+	// so the same build is correct on localhost, on a staging host and on the
+	// real domain. That makes them only as correct as SvelteKit's idea of the
+	// origin: behind Caddy, adapter-node needs PROTOCOL_HEADER/HOST_HEADER (or
+	// ORIGIN) or it will report the internal http://localhost:3000 and every
+	// preview will point at nothing. Both are set in infra/docker-compose.yml.
+	// ---------------------------------------------------------------------
+
+	const SITE_TITLE = 'Lucas — portfolio';
+	const SITE_DESCRIPTION =
+		'Software engineering student. Two machine-learning exhibits that run entirely in the browser.';
+	const OG_IMAGE_ALT =
+		'Lucas — two machine-learning exhibits that run in your browser. Connect 4 self-play and a raycast racer.';
+
+	/** Canonical URL: origin + path, deliberately without query or hash, so a
+	 *  link with `#work` on the end does not become a second canonical URL. */
+	const canonical = $derived(`${page.url.origin}${page.url.pathname}`);
+	const ogImage = $derived(`${page.url.origin}/og.png`);
 
 	// PLACEHOLDER — Lucas is rewriting this line.
 	const headline = 'Lucas — software engineering student, training small networks and putting them on the web.';
@@ -125,11 +148,26 @@
 </script>
 
 <svelte:head>
-	<title>Lucas — portfolio</title>
-	<meta
-		name="description"
-		content="Software engineering student. Two machine-learning exhibits that run entirely in the browser."
-	/>
+	<title>{SITE_TITLE}</title>
+	<meta name="description" content={SITE_DESCRIPTION} />
+	<link rel="canonical" href={canonical} />
+
+	<meta property="og:type" content="website" />
+	<meta property="og:site_name" content="Lucas" />
+	<meta property="og:title" content={SITE_TITLE} />
+	<meta property="og:description" content={SITE_DESCRIPTION} />
+	<meta property="og:url" content={canonical} />
+	<meta property="og:image" content={ogImage} />
+	<meta property="og:image:type" content="image/png" />
+	<meta property="og:image:width" content="1200" />
+	<meta property="og:image:height" content="630" />
+	<meta property="og:image:alt" content={OG_IMAGE_ALT} />
+
+	<meta name="twitter:card" content="summary_large_image" />
+	<meta name="twitter:title" content={SITE_TITLE} />
+	<meta name="twitter:description" content={SITE_DESCRIPTION} />
+	<meta name="twitter:image" content={ogImage} />
+	<meta name="twitter:image:alt" content={OG_IMAGE_ALT} />
 </svelte:head>
 
 <nav class="topnav" class:visible={navVisible}>
