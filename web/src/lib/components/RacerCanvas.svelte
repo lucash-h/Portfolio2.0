@@ -79,7 +79,13 @@
 		const left = (obs[0] + obs[1] + obs[2]) / 3;
 		const right = (obs[4] + obs[5] + obs[6]) / 3;
 		const ahead = obs[3];
-		const steer = clamp(-1, 1, (left - right) * 1.6);
+		// Sign matters and is easy to get backwards: `obs[0..2]` are the rays at
+		// NEGATIVE offsets from `heading` (RAY_ANGLES starts at -1.2), so steering
+		// toward that side means DECREASING heading, i.e. a negative `steer`.
+		// `(left - right)` therefore steers away from the clear side and into the
+		// wall — which is what this did, and why all three cars used to leave the
+		// track within two seconds and sit there jittering at the start line.
+		const steer = clamp(-1, 1, (right - left) * 1.6);
 		const throttle = clamp(-1, 1, ahead * 1.3 - 0.15);
 		return { steer, throttle };
 	}
@@ -457,10 +463,18 @@
 
 		function resizeCanvas() {
 			if (!canvasEl || !frameEl) return;
-			const rect = frameEl.getBoundingClientRect();
+			// `clientWidth`/`clientHeight`, NOT `getBoundingClientRect()`: the rect
+			// is the frame's BORDER box, and `.canvas-frame` has a 1px border. Sizing
+			// the canvas to the border box made the canvas 2px wider than the box that
+			// contains it, which grew the frame, which re-fired the ResizeObserver —
+			// a feedback loop that grew the canvas by 2px every frame and, because a
+			// ResizeObserver callback runs after rAF and assigning `canvas.width`
+			// clears the bitmap, wiped every frame the loop had just drawn. Blank
+			// canvas, forever. The canvas is also `position: absolute` now, so it
+			// cannot feed its own size back into the frame at all.
 			const dpr = Math.min(2, window.devicePixelRatio || 1);
-			const w = Math.max(1, Math.round(rect.width));
-			const h = Math.max(1, Math.round(rect.height));
+			const w = Math.max(1, Math.round(frameEl.clientWidth));
+			const h = Math.max(1, Math.round(frameEl.clientHeight));
 			canvasEl.width = Math.max(1, Math.round(w * dpr));
 			canvasEl.height = Math.max(1, Math.round(h * dpr));
 			canvasEl.style.width = `${w}px`;
@@ -635,11 +649,11 @@
 			if (frameEl && 'ResizeObserver' in window) {
 				ctl.resizeObserver = new ResizeObserver(() => {
 					resizeCanvas();
-					// A resize clears the backing store; if the loop isn't
-					// currently running (paused off-screen, or still waiting
-					// on the reduced-motion start prompt) redraw once so the
-					// panel doesn't go blank until the loop resumes.
-					if (!ctl.raf) draw();
+					// A resize clears the backing store, and this callback runs
+					// after the frame's rAF work, so redraw unconditionally —
+					// waiting for the next rAF would leave the just-cleared
+					// canvas on screen for a frame (and forever while paused).
+					draw();
 				});
 				ctl.resizeObserver.observe(frameEl);
 			}
@@ -796,6 +810,8 @@
 	}
 
 	canvas {
+		position: absolute;
+		inset: 0;
 		display: block;
 		width: 100%;
 		height: 100%;
