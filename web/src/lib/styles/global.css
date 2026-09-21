@@ -19,6 +19,53 @@ html {
 	}
 }
 
+/*
+ * Theme cross-fade.
+ *
+ * The themes are CSS custom properties, and custom properties do not
+ * interpolate: swapping `data-theme` repaints every colour on the next frame,
+ * which is a hard flash on a full-bleed dark<->light page. Registering all
+ * thirty-odd tokens with `@property` would make them animatable, but the
+ * transition still has to be declared on whatever consumes them, so it buys
+ * nothing here.
+ *
+ * Instead the toggle puts `data-theme-animating` on <html> for the length of
+ * the fade, and for exactly that long every element transitions its colour
+ * properties. The blunt `*` is the point: the page has hundreds of elements
+ * taking colour from tokens, and enumerating them would guarantee one gets
+ * missed and snaps while everything else fades. It is scoped to the fade, so
+ * ordinary hover and focus transitions keep their own (much faster) timings
+ * the rest of the time.
+ *
+ * `!important` because element-level rules set their own `transition`
+ * shorthand (buttons, links, the rail), which would otherwise win on
+ * specificity and snap those elements mid-fade.
+ */
+:root[data-theme-animating],
+:root[data-theme-animating] *,
+:root[data-theme-animating] *::before,
+:root[data-theme-animating] *::after {
+	transition:
+		background-color var(--theme-transition-duration) var(--theme-transition-easing),
+		border-color var(--theme-transition-duration) var(--theme-transition-easing),
+		color var(--theme-transition-duration) var(--theme-transition-easing),
+		fill var(--theme-transition-duration) var(--theme-transition-easing),
+		stroke var(--theme-transition-duration) var(--theme-transition-easing),
+		box-shadow var(--theme-transition-duration) var(--theme-transition-easing) !important;
+}
+
+/* Someone who has asked for less motion gets the instant swap: a 2.5s
+   full-page colour sweep is exactly the kind of thing that setting is for.
+   ThemeToggle checks the same query and skips the lock to match. */
+@media (prefers-reduced-motion: reduce) {
+	:root[data-theme-animating],
+	:root[data-theme-animating] *,
+	:root[data-theme-animating] *::before,
+	:root[data-theme-animating] *::after {
+		transition: none !important;
+	}
+}
+
 body {
 	margin: 0;
 	background-color: var(--color-bg);

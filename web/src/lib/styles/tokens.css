@@ -94,6 +94,11 @@
 	--border-width: 1px;
 
 	/* Motion */
+	/* Theme cross-fade. Read by ThemeToggle.svelte too, so the lock on the
+	   button and the CSS animation cannot drift apart. */
+	--theme-transition-duration: 2500ms;
+	--theme-transition-easing: cubic-bezier(0.4, 0, 0.2, 1);
+
 	--transition-fast: 120ms ease;
 	--transition-base: 260ms ease;
 	--transition-progress: 60ms linear;

@@ -95,6 +95,7 @@
 	import { parseTrack } from '$lib/games/racer/validateTrack';
 	import type { CarState, ControlInput, RaceState, Track } from '$lib/games/racer/types';
 	import { observeVisibility, type VisibilityHandle } from '$lib/util/visibility';
+	import { THEME_CHANGE_EVENT, type ThemeChangeDetail } from '$lib/components/ThemeToggle.svelte';
 
 	interface Props {
 		/** Path under `static/` to the track JSON. Defaults to the Grand Circuit. */
@@ -311,18 +312,39 @@
 		accent: ''
 	};
 
-	function readPalette(el: Element): Palette {
-		const cs = getComputedStyle(el);
-		const v = (name: string) => cs.getPropertyValue(name).trim();
+	/** Probe container: one zero-size span per token, each with `color` set to
+	 *  that token (see the `[data-token]` rules in the style block). */
+	let probeEl = $state<HTMLDivElement | null>(null);
+
+	/**
+	 * Read the palette through the probes rather than straight off the custom
+	 * properties.
+	 *
+	 * `getPropertyValue('--color-x')` returns the token's CURRENT value, and
+	 * custom properties do not interpolate — during the theme cross-fade it
+	 * flips to the new value on the first frame. Reading it made the canvas
+	 * snap to the new theme while the rest of the page was still a second and
+	 * a half from arriving.
+	 *
+	 * `color` on a real element does interpolate, and the fade's blanket
+	 * transition covers these spans like everything else, so their computed
+	 * colour IS the in-between value. Steady state is unchanged: a span whose
+	 * colour is `var(--color-ghost)` computes to exactly that token.
+	 */
+	function readPalette(): Palette {
+		const read = (token: string): string => {
+			const el = probeEl?.querySelector(`[data-token="${token}"]`);
+			return el ? getComputedStyle(el).color : '';
+		};
 		return {
-			trackCasing: v('--color-track-casing'),
-			trackSurface: v('--color-track-surface'),
-			centreline: v('--color-centreline'),
-			ghost: v('--color-ghost'),
-			ghostStroke: v('--color-ghost-stroke'),
-			ghostRival: v('--color-ghost-rival'),
-			ghostRivalStroke: v('--color-ghost-rival-stroke'),
-			accent: v('--color-accent')
+			trackCasing: read('track-casing'),
+			trackSurface: read('track-surface'),
+			centreline: read('centreline'),
+			ghost: read('ghost'),
+			ghostStroke: read('ghost-stroke'),
+			ghostRival: read('ghost-rival'),
+			ghostRivalStroke: read('ghost-rival-stroke'),
+			accent: read('accent')
 		};
 	}
 
@@ -493,8 +515,8 @@
 			keydown: null as ((e: KeyboardEvent) => void) | null,
 			keyup: null as ((e: KeyboardEvent) => void) | null,
 			resizeObserver: null as ResizeObserver | null,
-			themeQuery: null as MediaQueryList | null,
-			themeListener: null as (() => void) | null,
+			themeChange: null as ((e: Event) => void) | null,
+			themeRaf: 0,
 			visibility: null as VisibilityHandle | null
 		};
 
@@ -519,6 +541,12 @@
 		// runs when both agree it should.
 		let desiredRunning = false;
 		let offscreenOrHidden = false;
+
+		/** While the page is cross-fading between themes, the tokens this
+		 *  canvas paints with are changing every frame. Re-read them until
+		 *  this timestamp so the drawing fades with everything else instead
+		 *  of holding the old palette and snapping at the end. */
+		let paletteFadeUntil = 0;
 
 		function startLoop(): void {
 			if (ctl.raf) return;
@@ -566,7 +594,7 @@
 			canvasEl.style.height = `${h}px`;
 			const ctx = canvasEl.getContext('2d');
 			if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-			palette = readPalette(canvasEl);
+			palette = readPalette();
 		}
 
 		function playerObs(car: CarState, tr: Track): number[] {
@@ -644,6 +672,9 @@
 			if (!canvasEl || !track) return;
 			const ctx = canvasEl.getContext('2d');
 			if (!ctx) return;
+			// `getComputedStyle` per frame is not free, so only during a fade
+			// (~150 frames), never in the steady state.
+			if (performance.now() < paletteFadeUntil) palette = readPalette();
 			const cssW = canvasEl.clientWidth || parseFloat(canvasEl.style.width) || 1;
 			const cssH = canvasEl.clientHeight || parseFloat(canvasEl.style.height) || 1;
 			ctx.clearRect(0, 0, cssW, cssH);
@@ -758,6 +789,27 @@
 			window.addEventListener('keydown', ctl.keydown);
 			window.addEventListener('keyup', ctl.keyup);
 
+			ctl.themeChange = (e: Event) => {
+				const detail = (e as CustomEvent<ThemeChangeDetail>).detail;
+				const duration = detail?.duration ?? 0;
+				// +1 frame so the final read lands after the transition has
+				// settled on the new values rather than a hair short of them.
+				paletteFadeUntil = performance.now() + duration + 32;
+				palette = readPalette();
+				// A paused or off-screen panel gets no rAF from the sim loop,
+				// so drive the repaints here instead. Its own handle: the sim
+				// loop's stop/start must not cancel this, or vice versa.
+				if (!ctl.raf) {
+					const tick = () => {
+						draw();
+						ctl.themeRaf =
+							performance.now() < paletteFadeUntil ? requestAnimationFrame(tick) : 0;
+					};
+					if (!ctl.themeRaf) ctl.themeRaf = requestAnimationFrame(tick);
+				}
+			};
+			window.addEventListener(THEME_CHANGE_EVENT, ctl.themeChange);
+
 			restartHandler = () => {
 				if (!track) return;
 				cars = [
@@ -807,6 +859,8 @@
 			if (ctl.raf) cancelAnimationFrame(ctl.raf);
 			if (ctl.keydown) window.removeEventListener('keydown', ctl.keydown);
 			if (ctl.keyup) window.removeEventListener('keyup', ctl.keyup);
+			if (ctl.themeChange) window.removeEventListener(THEME_CHANGE_EVENT, ctl.themeChange);
+			if (ctl.themeRaf) cancelAnimationFrame(ctl.themeRaf);
 			if (ctl.resizeObserver) ctl.resizeObserver.disconnect();
 			ctl.visibility?.dispose();
 			restartHandler = null;
@@ -836,6 +890,20 @@
 </script>
 
 <div class="racer">
+	<!-- Colour probes for the canvas; see `readPalette`. Rendered (not
+	     `display: none`) because a box that is not rendered does not run
+	     transitions, which is the entire point of them. -->
+	<div class="palette-probe" aria-hidden="true" bind:this={probeEl}>
+		<span data-token="track-casing"></span>
+		<span data-token="track-surface"></span>
+		<span data-token="centreline"></span>
+		<span data-token="ghost"></span>
+		<span data-token="ghost-stroke"></span>
+		<span data-token="ghost-rival"></span>
+		<span data-token="ghost-rival-stroke"></span>
+		<span data-token="accent"></span>
+	</div>
+
 	<div class="canvas-frame" bind:this={frameEl}>
 		<canvas bind:this={canvasEl} aria-label="Racer canvas: track, sensor beams, pace cars and player car"
 		></canvas>
@@ -915,6 +983,40 @@
 		gap: var(--space-4);
 		height: 100%;
 		min-height: 0;
+	}
+
+	.palette-probe {
+		position: absolute;
+		width: 0;
+		height: 0;
+		overflow: hidden;
+		opacity: 0;
+		pointer-events: none;
+	}
+
+	.palette-probe [data-token='track-casing'] {
+		color: var(--color-track-casing);
+	}
+	.palette-probe [data-token='track-surface'] {
+		color: var(--color-track-surface);
+	}
+	.palette-probe [data-token='centreline'] {
+		color: var(--color-centreline);
+	}
+	.palette-probe [data-token='ghost'] {
+		color: var(--color-ghost);
+	}
+	.palette-probe [data-token='ghost-stroke'] {
+		color: var(--color-ghost-stroke);
+	}
+	.palette-probe [data-token='ghost-rival'] {
+		color: var(--color-ghost-rival);
+	}
+	.palette-probe [data-token='ghost-rival-stroke'] {
+		color: var(--color-ghost-rival-stroke);
+	}
+	.palette-probe [data-token='accent'] {
+		color: var(--color-accent);
 	}
 
 	.canvas-frame {
