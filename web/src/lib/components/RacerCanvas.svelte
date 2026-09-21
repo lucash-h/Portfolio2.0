@@ -4,6 +4,52 @@
 	 * real `CanvasRenderingContext2D` (jsdom has none).
 	 */
 
+	/** Steering authority is halved at this speed (m/s) and keeps falling.
+	 *  A kinematic bicycle model has no grip limit, so without this the car
+	 *  turns as sharply at 190 km/h as it does at walking pace. */
+	export const STEER_SPEED_REF = 14;
+	/** Floor, so the car never becomes uncontrollable at the top end. */
+	export const STEER_MIN_AUTHORITY = 0.32;
+	/** Per-tick ramp toward what the keys are asking for, and back to centre
+	 *  when they are released (release is faster — a car that will not
+	 *  straighten feels broken in a way a slow turn-in does not). */
+	export const STEER_RATE = 0.055;
+	export const STEER_RETURN_RATE = 0.11;
+
+	function clampTo(lo: number, hi: number, v: number): number {
+		return v < lo ? lo : v > hi ? hi : v;
+	}
+
+	/** How much of full lock the keys can ask for at this speed. */
+	export function steerAuthority(speed: number): number {
+		return clampTo(STEER_MIN_AUTHORITY, 1, STEER_SPEED_REF / (Math.abs(speed) + STEER_SPEED_REF));
+	}
+
+	/**
+	 * One tick of player steering: where the smoothed steering position moves
+	 * to, given which arrows are held, how fast the car is going, and where it
+	 * was last tick.
+	 *
+	 * SIGN, because this has been wrong twice: a positive `steer` increases
+	 * `heading` (physics.ts step 9-10), and increasing heading is clockwise on
+	 * a y-down canvas — a RIGHT turn. Left is therefore negative.
+	 *
+	 * Pure, and exported, so `RacerCanvas.test.ts` can pin the direction and
+	 * the feel down without a canvas.
+	 */
+	export function steerFromKeys(
+		keys: { left?: boolean; right?: boolean },
+		speed: number,
+		previous: number
+	): number {
+		let target = 0;
+		if (keys.left) target -= 1;
+		if (keys.right) target += 1;
+		target *= steerAuthority(speed);
+		const rate = target === 0 ? STEER_RETURN_RATE : STEER_RATE;
+		return previous + clampTo(-rate, rate, target - previous);
+	}
+
 	/** Format a lap time in `m:ss.mmm`, or `--.---` for `null`/non-finite. */
 	export function formatLapTime(ms: number | null): string {
 		if (ms === null || !Number.isFinite(ms)) return '--.---';
@@ -51,11 +97,11 @@
 	import { observeVisibility, type VisibilityHandle } from '$lib/util/visibility';
 
 	interface Props {
-		/** Path under `static/` to the track JSON. Defaults to the oval. */
+		/** Path under `static/` to the track JSON. Defaults to the Grand Circuit. */
 		trackPath?: string;
 	}
 
-	let { trackPath = '/tracks/oval.json' }: Props = $props();
+	let { trackPath = '/tracks/grand.json' }: Props = $props();
 
 	// ---------------------------------------------------------------------
 	// P5-B seam
@@ -85,7 +131,10 @@
 		// `(left - right)` therefore steers away from the clear side and into the
 		// wall — which is what this did, and why all three cars used to leave the
 		// track within two seconds and sit there jittering at the start line.
-		const steer = clamp(-1, 1, (right - left) * 1.6);
+		// Gain 1.1, down from 1.6: swept over all four tracks, 0.9-1.6 all lap the
+		// Grand Circuit cleanly (5 laps a minute, 0% off-track), and the lower the
+		// gain the less the pace cars saw at the wheel on the straights.
+		const steer = clamp(-1, 1, (right - left) * 1.1);
 		const throttle = clamp(-1, 1, ahead * 1.3 - 0.15);
 		return { steer, throttle };
 	}
@@ -109,6 +158,10 @@
 		return v < lo ? lo : v > hi ? hi : v;
 	}
 
+	// Player steering feel lives in the module block above (`steerFromKeys`):
+	// the physics constants are contract-locked (CONTRACTS §4, asserted to
+	// 1e-9 by the Python port), so calming the car down happens on the input.
+
 	// ---------------------------------------------------------------------
 	// Per-car simulation bookkeeping. Plain (non-reactive) objects — the
 	// simulation runs at 60 physics ticks/sec and must not go through Svelte
@@ -122,6 +175,10 @@
 		control: ControlInput;
 		lapStartTick: number;
 		bestLapTicks: number | null;
+		/** False until the car has crossed the gate once. The run from the grid
+		 *  to the start line is an out-lap, not a lap: timing it logged a
+		 *  ~1.2s "best" that no real lap round a 700m circuit can beat. */
+		lapStarted: boolean;
 	}
 
 	function spawnCar(track: Track, id: SimCar['id'], lateralOffset: number): SimCar {
@@ -136,9 +193,21 @@
 		const ty = dy / len;
 		const nx = -ty;
 		const ny = tx;
+		// Start BEHIND the gate, not on it: spawning exactly on the start line
+		// made the first tick a gate crossing, which logged a one-tick "best
+		// lap" of 0:00.017 that no real lap could ever beat. Fall back to the
+		// gate itself if the track doubles back so tightly that 6m upstream is
+		// off the surface.
+		const backoff = 6;
+		let sx = p[0] - tx * backoff + nx * lateralOffset;
+		let sy = p[1] - ty * backoff + ny * lateralOffset;
+		if (!isOnTrack(track, sx, sy)) {
+			sx = p[0] + nx * lateralOffset;
+			sy = p[1] + ny * lateralOffset;
+		}
 		const car: CarState = {
-			x: p[0] + nx * lateralOffset,
-			y: p[1] + ny * lateralOffset,
+			x: sx,
+			y: sy,
 			heading: Math.atan2(ty, tx),
 			vx: 0,
 			vy: 0,
@@ -150,7 +219,8 @@
 			race: initRaceState(),
 			control: { steer: 0, throttle: 0 },
 			lapStartTick: 0,
-			bestLapTicks: null
+			bestLapTicks: null,
+			lapStarted: false
 		};
 	}
 
@@ -429,6 +499,8 @@
 		};
 
 		const pressed: Record<string, boolean> = {};
+		/** Smoothed steering position, carried between ticks (see STEER_RATE). */
+		let playerSteer = 0;
 		let playerControlled = false;
 		let reducedMotion = false;
 		let track: Track | null = null;
@@ -501,14 +573,12 @@
 			return castRays(car, tr);
 		}
 
-		function keysToControl(): ControlInput {
-			let steer = 0;
+		function keysToControl(speed: number): ControlInput {
+			playerSteer = steerFromKeys(pressed, speed, playerSteer);
 			let throttle = 0;
-			if (pressed.left) steer += 1;
-			if (pressed.right) steer -= 1;
 			if (pressed.up) throttle += 1;
 			if (pressed.down) throttle -= 1;
-			return { steer, throttle };
+			return { steer: playerSteer, throttle };
 		}
 
 		function simulateTick(tr: Track) {
@@ -516,7 +586,7 @@
 				let input: ControlInput;
 				if (sim.id === 'player') {
 					input = playerControlled
-						? keysToControl()
+						? keysToControl(Math.hypot(sim.car.vx, sim.car.vy))
 						: applyTierCap(ghostPolicy(playerObs(sim.car, tr)), PACE_TIERS[1].throttleCap);
 				} else {
 					const tierIndex = sim.id === 'ghost' ? selectedTierIndex : rivalTierIndex;
@@ -532,12 +602,13 @@
 				const nextRace = updateRaceState(sim.race, tr, prev, curr, onTrack);
 
 				if (crossing === 1) {
-					if (nextRace.lapCount > sim.race.lapCount) {
+					if (sim.lapStarted && nextRace.lapCount > sim.race.lapCount) {
 						const lapTicks = tickCount + 1 - sim.lapStartTick;
 						if (sim.bestLapTicks === null || lapTicks < sim.bestLapTicks) {
 							sim.bestLapTicks = lapTicks;
 						}
 					}
+					sim.lapStarted = true;
 					sim.lapStartTick = tickCount + 1;
 				}
 
@@ -697,6 +768,7 @@
 				tickCount = 0;
 				accumulator = 0;
 				playerControlled = false;
+				playerSteer = 0;
 				pressed.up = pressed.down = pressed.left = pressed.right = false;
 				hud = {
 					...hud,
@@ -707,6 +779,9 @@
 					playerControlled: false,
 					status: 'cars are self-driving — press a key to take the wheel'
 				};
+				// Repaint now: while the sim is paused there is no rAF coming,
+				// so without this the canvas keeps showing the old positions.
+				draw();
 			};
 
 			runHandler = (run: boolean) => {

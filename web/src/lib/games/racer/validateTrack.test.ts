@@ -43,6 +43,44 @@ describe('validateTrack', () => {
       const errors = validateTrack(parseTrack(hairpinJson.default));
       expect(errors).toHaveLength(0);
     });
+
+    it('grand.json validates cleanly', async () => {
+      const grandJson = await import('../../../../static/tracks/grand.json');
+      const errors = validateTrack(parseTrack(grandJson.default));
+      expect(errors).toHaveLength(0);
+    });
+
+    it('grand.json is the long one, and its surfaces never merge into a shortcut', async () => {
+      // `validateTrack` checks the centreline never crosses itself, but two
+      // sections running close and parallel would still fuse into one blob of
+      // drivable surface (on-track is "within halfWidth of the centreline"),
+      // handing the cars a shortcut. Only pairs far apart ALONG the lap count:
+      // consecutive points are supposed to be close.
+      const grandJson = await import('../../../../static/tracks/grand.json');
+      const track = parseTrack(grandJson.default);
+      const pts = track.centreline;
+      const n = pts.length;
+
+      const segLen = pts.map((p, i) => Math.hypot(pts[(i + 1) % n][0] - p[0], pts[(i + 1) % n][1] - p[1]));
+      const lapLength = segLen.reduce((a, b) => a + b, 0);
+      expect(lapLength).toBeGreaterThan(600);
+
+      const arc: number[] = [0];
+      for (let i = 1; i < n; i++) arc[i] = arc[i - 1] + segLen[i - 1];
+      const arcApart = (i: number, j: number) => {
+        const d = Math.abs(arc[i] - arc[j]);
+        return Math.min(d, lapLength - d);
+      };
+
+      let closest = Infinity;
+      for (let i = 0; i < n; i++) {
+        for (let j = i + 1; j < n; j++) {
+          if (arcApart(i, j) < 45) continue;
+          closest = Math.min(closest, Math.hypot(pts[i][0] - pts[j][0], pts[i][1] - pts[j][1]));
+        }
+      }
+      expect(closest).toBeGreaterThan(track.halfWidth * 2.2);
+    });
   });
 
   describe('baseline validity', () => {

@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { flushSync, mount, unmount } from 'svelte';
+import { step } from '$lib/games/racer/physics';
+import type { CarState, Track } from '$lib/games/racer/types';
 
 /**
  * jsdom has no real canvas (`HTMLCanvasElement.prototype.getContext` returns
@@ -97,6 +99,8 @@ describe('RacerCanvas', () => {
 	let target: HTMLDivElement;
 	let RacerCanvas: typeof import('./RacerCanvas.svelte').default;
 	let formatLapTime: typeof import('./RacerCanvas.svelte').formatLapTime;
+	let steerFromKeys: typeof import('./RacerCanvas.svelte').steerFromKeys;
+	let steerAuthority: typeof import('./RacerCanvas.svelte').steerAuthority;
 
 	beforeEach(async () => {
 		installCanvasStub();
@@ -106,6 +110,8 @@ describe('RacerCanvas', () => {
 		const mod = await import('./RacerCanvas.svelte');
 		RacerCanvas = mod.default;
 		formatLapTime = mod.formatLapTime;
+		steerFromKeys = mod.steerFromKeys;
+		steerAuthority = mod.steerAuthority;
 	});
 
 	afterEach(() => {
@@ -124,6 +130,75 @@ describe('RacerCanvas', () => {
 		expect(formatLapTime(null)).toBe('--.---');
 		expect(formatLapTime(Number.NaN)).toBe('--.---');
 		expect(formatLapTime(Infinity)).toBe('--.---');
+	});
+
+	describe('player steering', () => {
+		/** Hold a key for `ticks` ticks from a standstill-ish speed and return
+		 *  the steering position it settles at. */
+		function hold(keys: { left?: boolean; right?: boolean }, speed: number, ticks: number): number {
+			let steer = 0;
+			for (let i = 0; i < ticks; i++) steer = steerFromKeys(keys, speed, steer);
+			return steer;
+		}
+
+		it('turns the car the way the arrow points, on screen', () => {
+			// The contract this pins down: LEFT must move the car toward the top
+			// of the canvas when it is travelling to the right, because that is
+			// what "left" means to someone looking at it. Sign errors here have
+			// shipped twice, so assert against `step()` rather than the sign.
+			const track: Track = {
+				name: 'straight-ish',
+				centreline: [
+					[0, 0],
+					[40, 0],
+					[80, 0],
+					[120, 0],
+					[160, 0],
+					[160, 40],
+					[80, 40],
+					[0, 40]
+				],
+				halfWidth: 20,
+				startIndex: 0
+			};
+			const drive = (keys: { left?: boolean; right?: boolean }) => {
+				let car: CarState = { x: 0, y: 0, heading: 0, vx: 12, vy: 0, angularVelocity: 0 };
+				let steer = 0;
+				for (let i = 0; i < 60; i++) {
+					steer = steerFromKeys(keys, Math.hypot(car.vx, car.vy), steer);
+					car = step(car, { steer, throttle: 0 }, track);
+				}
+				return car;
+			};
+
+			// Facing +x on a y-down canvas: left is -y (up the screen).
+			expect(drive({ left: true }).y).toBeLessThan(-1);
+			expect(drive({ right: true }).y).toBeGreaterThan(1);
+			expect(Math.abs(drive({}).y)).toBeLessThan(1e-9);
+		});
+
+		it('ramps in rather than snapping to full lock', () => {
+			const oneTick = Math.abs(steerFromKeys({ left: true }, 0, 0));
+			expect(oneTick).toBeCloseTo(0.055, 5);
+			// ...and still climbs well past it when the key is held.
+			expect(Math.abs(hold({ left: true }, 0, 60))).toBeGreaterThan(0.9);
+		});
+
+		it('returns to centre faster than it turns in', () => {
+			const turned = hold({ left: true }, 0, 60);
+			const releasedOnce = steerFromKeys({}, 0, turned);
+			expect(Math.abs(releasedOnce - turned)).toBeCloseTo(0.11, 5);
+			expect(Math.abs(hold({}, 0, 60))).toBeLessThan(1e-9);
+		});
+
+		it('gives less steering authority the faster the car is going', () => {
+			expect(steerAuthority(0)).toBe(1);
+			expect(steerAuthority(14)).toBeCloseTo(0.5, 5);
+			expect(steerAuthority(55)).toBe(0.32); // floored, never zero
+			expect(Math.abs(hold({ left: true }, 40, 120))).toBeLessThan(
+				Math.abs(hold({ left: true }, 0, 120))
+			);
+		});
 	});
 
 	it('mounts, loads and parses a track without throwing', async () => {
