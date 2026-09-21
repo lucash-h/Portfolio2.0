@@ -14,6 +14,13 @@
 	 * Routing it through `$state` would re-render both game panels on every
 	 * scroll frame, which visibly stutters the board and the canvas. Only
 	 * crossing the halfway mark flips a rune, because the dots genuinely need it.
+	 *
+	 * Below 760px none of that applies. A 200vw rail inside `overflow: hidden`
+	 * needs a viewport wide enough to hold a panel, and a phone has not got
+	 * one — the panels were being clipped, not scrolled, with no way to reach
+	 * what was cut off. So on narrow screens the rail stops moving: the
+	 * scroll driver collapses, one panel is shown at a time, and a pair of
+	 * labelled tabs switches between them. Same markup, same two panels.
 	 */
 	import type { Snippet } from 'svelte';
 
@@ -32,8 +39,13 @@
 	let titleBEl = $state<HTMLSpanElement | null>(null);
 	let progEl = $state<HTMLSpanElement | null>(null);
 
-	/** Which panel the dots highlight. The only scroll-derived value that is reactive. */
+	/** Which panel the dots highlight — and, on narrow screens, which panel is
+	 *  shown at all. The only scroll-derived value that is reactive. */
 	let activePanel = $state(0);
+
+	/** Narrow layout: tabs instead of a scroll-driven rail. Kept in a rune
+	 *  because the markup and the scroll handlers both branch on it. */
+	let compact = $state(false);
 
 	const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
 
@@ -45,7 +57,22 @@
 		return clamp((window.scrollY - top) / span, 0, 1);
 	}
 
+	/** Drop the inline styles the desktop path writes. They would otherwise win
+	 *  on specificity over the compact layout's CSS and leave the rail
+	 *  translated half a screen off, or a title stuck at `opacity: 0`. */
+	function clearInlineStyles() {
+		if (rail) rail.style.transform = '';
+		for (const el of [titleAEl, titleBEl]) {
+			if (!el) continue;
+			el.style.opacity = '';
+			el.style.transform = '';
+		}
+		if (progEl) progEl.style.transform = '';
+	}
+
 	function paint(p: number) {
+		// Compact layout is CSS and `activePanel`; nothing here to drive.
+		if (compact) return;
 		if (rail) rail.style.transform = `translate3d(${-p * 50}%, 0, 0)`;
 
 		// Dead zone at each end so the titles hold while a panel is fully on screen.
@@ -70,6 +97,35 @@
 		window.scrollTo({ top: scroller.offsetTop + (i === 0 ? 0 : span), behavior: 'smooth' });
 	}
 
+	/** What the dots and the tabs both call. On a wide screen the panel IS the
+	 *  scroll position, so it scrolls; on a narrow one it is just state. */
+	function selectPanel(i: number) {
+		if (!compact) {
+			scrollToPanel(i);
+			return;
+		}
+		activePanel = i;
+		if (scroller && window.scrollY > scroller.offsetTop) {
+			scroller.scrollIntoView({ block: 'start' });
+		}
+	}
+
+	$effect(() => {
+		if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+		// Must stay in step with the `max-width: 760px` blocks in this file's
+		// style block and in +page.svelte: the CSS decides what is shown, this
+		// decides whether the scroll handlers write inline styles over it.
+		const mq = window.matchMedia('(max-width: 760px)');
+		const sync = () => {
+			compact = mq.matches;
+			if (compact) clearInlineStyles();
+			else paint(progress());
+		};
+		sync();
+		mq.addEventListener('change', sync);
+		return () => mq.removeEventListener('change', sync);
+	});
+
 	$effect(() => {
 		let frame = 0;
 		const onScroll = () => {
@@ -84,13 +140,13 @@
 			if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
 			// The racer uses arrows to drive. Only steal them while Fig. 1 is showing,
 			// and never from a focused control.
-			if (progress() > 0.5) return;
+			if (compact ? activePanel === 1 : progress() > 0.5) return;
 			const el = document.activeElement;
 			if (el && el !== document.body && el.closest('input, textarea, select, button, [tabindex]')) {
 				return;
 			}
 			e.preventDefault();
-			scrollToPanel(e.key === 'ArrowRight' ? 1 : 0);
+			selectPanel(e.key === 'ArrowRight' ? 1 : 0);
 		};
 
 		paint(progress());
@@ -112,8 +168,10 @@
 		<div class="header">
 			<span class="wordmark">Lucas</span>
 			<div class="titles">
-				<span class="fig-title" bind:this={titleAEl}>{titleA}</span>
-				<span class="fig-title" style="opacity:0" bind:this={titleBEl}>{titleB}</span>
+				<span class="fig-title" class:shown={activePanel === 0} bind:this={titleAEl}>{titleA}</span>
+				<span class="fig-title" class:shown={activePanel === 1} style="opacity:0" bind:this={titleBEl}
+					>{titleB}</span
+				>
 			</div>
 			<div class="progress">
 				<span>01</span>
@@ -123,8 +181,20 @@
 		</div>
 
 		<div class="rail" bind:this={rail}>
-			<section class="panel">{@render panelA()}</section>
-			<section class="panel">{@render panelB()}</section>
+			<section class="panel" class:active={activePanel === 0}>{@render panelA()}</section>
+			<section class="panel" class:active={activePanel === 1}>{@render panelB()}</section>
+		</div>
+
+		<!-- Compact-layout switch. Separate from the dots rather than a restyle
+		     of them: only one of the two is ever displayed, so the other is out
+		     of the accessibility tree instead of being a duplicate control. -->
+		<div class="tabs">
+			<button type="button" class="tab" class:on={activePanel === 0} onclick={() => selectPanel(0)}>
+				01 · {titleA.replace(/^FIG\.\s*\d+\s*—\s*/, '')}
+			</button>
+			<button type="button" class="tab" class:on={activePanel === 1} onclick={() => selectPanel(1)}>
+				02 · {titleB.replace(/^FIG\.\s*\d+\s*—\s*/, '')}
+			</button>
 		</div>
 
 		<div class="dots">
@@ -134,7 +204,7 @@
 				class:on={activePanel === 0}
 				aria-label="Go to figure 1, Connect 4"
 				aria-current={activePanel === 0}
-				onclick={() => scrollToPanel(0)}
+				onclick={() => selectPanel(0)}
 			></button>
 			<button
 				type="button"
@@ -142,7 +212,7 @@
 				class:on={activePanel === 1}
 				aria-label="Go to figure 2, racer"
 				aria-current={activePanel === 1}
-				onclick={() => scrollToPanel(1)}
+				onclick={() => selectPanel(1)}
 			></button>
 		</div>
 	</div>
@@ -275,9 +345,111 @@
 		outline-offset: 3px;
 	}
 
+	/* Hidden on wide screens: the rail itself is the navigation there. */
+	.tabs {
+		display: none;
+	}
+
 	@media (prefers-reduced-motion: reduce) {
 		.thumb {
 			transition: none;
+		}
+	}
+
+	/* ── Compact layout ─────────────────────────────────────────
+	   No scroll driver, no 200vw rail, no transform. One panel at a
+	   time, switched by the tabs. Everything here is layout only —
+	   the panels' own contents are unchanged. */
+	@media (max-width: 760px) {
+		.scroller {
+			height: auto;
+		}
+
+		.pin {
+			/* `relative`, not `static`: the header is absolutely positioned and
+			   would otherwise anchor to the viewport. */
+			position: relative;
+			height: auto;
+			min-height: 100svh;
+			overflow: visible;
+			display: flex;
+			flex-direction: column;
+		}
+
+		.rail {
+			width: 100%;
+			height: auto;
+			flex: 1;
+			will-change: auto;
+			/* Room for the sticky tabs to float over. A stuck element still
+			   overlaps whatever is behind it, and without this it sat on top
+			   of the racer's last row of buttons. */
+			padding-bottom: 58px;
+		}
+
+		.panel {
+			width: 100%;
+			height: auto;
+			min-width: 0;
+			display: none;
+		}
+
+		.panel.active {
+			display: block;
+			flex: 1;
+		}
+
+		/* The title crossfade and the 01—02 thumb are both scroll-derived. */
+		.fig-title {
+			opacity: 0;
+			transform: none;
+		}
+
+		.fig-title.shown {
+			opacity: 1;
+		}
+
+		.progress,
+		.dots {
+			display: none;
+		}
+
+		.tabs {
+			position: sticky;
+			bottom: 0;
+			z-index: 30;
+			display: flex;
+			gap: 8px;
+			padding: 10px clamp(14px, 4vw, 28px) calc(10px + env(safe-area-inset-bottom));
+			background: color-mix(in srgb, var(--color-bg) 94%, transparent);
+			border-top: var(--border-width) solid var(--color-border-soft);
+		}
+
+		.tab {
+			flex: 1;
+			min-width: 0;
+			padding: 11px 8px;
+			font-family: var(--font-mono);
+			font-size: 11px;
+			letter-spacing: 0.02em;
+			white-space: nowrap;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			cursor: pointer;
+			border: var(--border-width) solid var(--color-border);
+			background: var(--color-surface);
+			color: var(--color-text-muted);
+		}
+
+		.tab.on {
+			border-color: var(--color-accent);
+			background: var(--color-accent-wash);
+			color: var(--color-accent);
+		}
+
+		.tab:focus-visible {
+			outline: 2px solid var(--color-focus-ring);
+			outline-offset: 2px;
 		}
 	}
 </style>

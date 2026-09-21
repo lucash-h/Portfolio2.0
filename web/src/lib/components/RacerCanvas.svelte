@@ -1204,4 +1204,65 @@
 	.readouts .accent b {
 		color: var(--color-accent);
 	}
+
+	/* ── Narrow screens ─────────────────────────────────────────
+	   The strip is a single row of nowrap groups pushed apart by two
+	   `margin-left: auto`s. That is wider than a phone, and because the
+	   canvas frame sits in the same column it was the strip, not the
+	   canvas, deciding how wide the panel had to be. Here the groups
+	   stack and nothing claims the leftover space. */
+	@media (max-width: 760px) {
+		.racer {
+			gap: var(--space-3);
+		}
+
+		.bottom-strip {
+			gap: 10px 16px;
+			font-size: 11px;
+		}
+
+		.tier-group {
+			flex-wrap: wrap;
+			gap: 6px;
+		}
+
+		.readouts,
+		.play-button,
+		.restart-button {
+			margin-left: 0;
+		}
+
+		.readouts {
+			flex-wrap: wrap;
+			gap: 8px 16px;
+			width: 100%;
+		}
+
+		/* The overlay costs most of a phone's canvas width and repeats the lap
+		   readouts below it. The honesty note stays: it is the reason these
+		   cars can be called pace cars at all, and it is not optional because
+		   the screen is small. */
+		.best-lap {
+			display: none;
+		}
+
+		.honesty-note {
+			max-width: none;
+			width: 100%;
+			order: 99;
+			font-size: 10px;
+		}
+
+		.hint {
+			font-size: 10px;
+			left: 10px;
+			top: 10px;
+		}
+
+		.tier-button,
+		.play-button,
+		.restart-button {
+			padding: 8px 10px;
+		}
+	}
 </style>

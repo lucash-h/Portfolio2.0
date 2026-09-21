@@ -458,6 +458,12 @@
 	.fig2 {
 		height: 100%;
 		display: grid;
+		/* Explicit, and capped at the panel: an implicit column is `auto`, which
+		   sizes to its widest max-content child. The racer's bottom strip is a
+		   row of nowrap readouts, so on a phone it was setting the panel width
+		   and pushing the canvas ~40px past the viewport, where `overflow:
+		   hidden` on the rail quietly cut it off. */
+		grid-template-columns: minmax(0, 1fr);
 		grid-template-rows: auto minmax(0, 1fr);
 		gap: clamp(12px, 2vh, 22px);
 		padding: clamp(84px, 14vh, 130px) clamp(28px, 6vw, 88px) clamp(28px, 6vh, 64px);
@@ -607,14 +613,15 @@
 	}
 
 	/* Single column below ~760px, per the handoff. The board is sized from
-	   viewport height, so it shrinks rather than overflowing. */
+	   viewport height, so it shrinks rather than overflowing. GameRail swaps
+	   to its tab layout at the same breakpoint. */
 	@media (max-width: 760px) {
 		.fig1 {
 			grid-template-columns: minmax(0, 1fr);
 			grid-template-rows: auto minmax(0, 1fr);
 			align-content: start;
 			gap: clamp(16px, 3vh, 28px);
-			padding-top: clamp(70px, 12vh, 100px);
+			padding: clamp(70px, 12vh, 100px) clamp(14px, 4vw, 28px) clamp(18px, 3vh, 32px);
 		}
 
 		.fig1-copy .lead,
@@ -624,6 +631,30 @@
 
 		.stats {
 			margin-top: 16px;
+		}
+
+		.fig2 {
+			padding: clamp(70px, 12vh, 100px) clamp(14px, 4vw, 28px) clamp(18px, 3vh, 32px);
+		}
+
+		/* The tracks are wide (the Grand Circuit is roughly 2.7:1), so on a
+		   phone the canvas is width-limited and any extra height is empty
+		   grey. Cap it: the panel then fits one screen, which keeps the
+		   controls out from under the sticky tabs. The floor stops it
+		   collapsing to a sliver when the strip below wraps to four lines. */
+		.fig2 :global(.canvas-frame) {
+			min-height: 30svh;
+			max-height: 40svh;
+		}
+
+		.intro {
+			font-size: 14px;
+		}
+
+		/* Four nav items plus the theme toggle do not fit on a phone; the
+		   sections are a short scroll apart anyway. */
+		.topnav a:not(.brand) {
+			font-size: 12px;
 		}
 	}
 </style>

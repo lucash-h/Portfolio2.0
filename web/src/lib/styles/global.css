@@ -154,7 +154,23 @@ a:hover {
 	height: 1px;
 	overflow: hidden;
 	clip: rect(0 0 0 0);
+	clip-path: inset(50%);
 	white-space: nowrap;
+}
+
+/*
+ * A <table> ignores `width: 1px`: table layout never goes below the table's
+ * min-content width, so the screen-reader board state in Connect4Board stayed
+ * ~1300px wide, invisible but real, and stretched the document's scrollable
+ * width to 1362px on a 390px screen. `overflow-x: hidden` on <body> hid the
+ * scrollbar and left the page pannable instead.
+ *
+ * `table-layout: fixed` makes the table honour the width it was given; the
+ * cells overflow it and are clipped by `overflow: hidden` above. The element
+ * stays a real table, which is the entire point of it for screen readers.
+ */
+table.visually-hidden {
+	table-layout: fixed;
 }
 
 button {
