@@ -20,8 +20,12 @@ export interface CheckpointOutcomeRow {
 
 export interface RacerCheckpointRow {
 	checkpointId: string;
-	humanBestMs: number;
-	aiBestMs: number;
+	/** Null until a human has set a time on this checkpoint — a lap nobody has
+	 *  driven is not the same as a lap of 0ms, and the API models it that way
+	 *  (`RacerCheckpointStats` in `$lib/db/queries`). This type said `number`
+	 *  and quietly disagreed with the endpoint it claims to mirror. */
+	humanBestMs: number | null;
+	aiBestMs: number | null;
 	races: number;
 }
 
@@ -90,4 +94,18 @@ export function ticks(max: number, count = 4): number[] {
 
 export function formatCount(n: number): string {
 	return n.toLocaleString('en-US');
+}
+
+/**
+ * A lap time in `m:ss.mmm`, or an em dash when nobody has set one. Kept here
+ * rather than imported from `RacerCanvas.svelte` so the dashboard does not
+ * depend on a game component just to format a number.
+ */
+export function formatLapMs(ms: number | null): string {
+	if (ms === null || !Number.isFinite(ms)) return '—';
+	const total = Math.max(0, Math.round(ms));
+	const minutes = Math.floor(total / 60000);
+	const seconds = Math.floor((total % 60000) / 1000);
+	const millis = total % 1000;
+	return `${minutes}:${String(seconds).padStart(2, '0')}.${String(millis).padStart(3, '0')}`;
 }

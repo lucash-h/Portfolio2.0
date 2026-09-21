@@ -36,9 +36,10 @@ Two lines in the previous version of this file were wrong, and are worth naming
 so they are not re-copied:
 
 - **"All routes return 200: `/`, `/work`, `/about`, `/lab`, `/lab/connect4`"** —
-  false. `web/src/routes/` contains exactly one page plus two API endpoints.
-  `/work` and `/about` are in-page anchors (`#work`, `#about`), and `/lab*` does
-  not exist. Checked 2026-09-21: `/` → 200, the other four → **404**.
+  was false when written. `/work` and `/about` are in-page anchors (`#work`,
+  `#about`), and `/lab/connect4` does not exist. `/lab` has since been rebuilt
+  and does serve the dashboard. Checked 2026-09-21: `/` → 200, `/lab` → 200,
+  `/work`, `/about`, `/lab/connect4` → **404**.
 - **"Docker Desktop is not running, so nothing container-related has been
   executed"** — no longer true; the whole stack has now been built and run.
 
@@ -75,7 +76,7 @@ so they are not re-copied:
 | P2-A env + MCTS | done | Parity proven both ways; tamper-tested. Python and TypeScript now agree with the same fixture corpus. |
 | P2-B/P2-C training + export | done | Real checkpoints at 50/150/300 self-play games, exported to ONNX and listed in `web/static/models/manifest.json`. The exhibit's difficulty ladder is those three checkpoints. |
 | P3-A db + API | done | `/api/games` and `/api/stats`. Both degrade to an empty-state response with no database, so a fresh install renders. |
-| P3-B dashboard | **built, not reachable** | `EloCurve`, `WinRateBars` and `OpeningHeatmap` exist and are tested, but **no page imports them** — there is no route that renders the dashboard. Either wire them into a section or a `/lab` route, or the work is invisible. |
+| P3-B dashboard | done | Live at `/lab`, linked from the nav and from the front page's "games logged" stat. The original `/lab/dashboard` page was deleted by the redesign (381eadb) along with the whole route tree; this is a rebuild against the current design, not a revert. Acceptance met: renders against a fixture payload and the empty case, no horizontal scroll at 360px. |
 | P4 racer | done | Deterministic fixed-step physics with TS/Python parity, four tracks incl. the 698 m Grand Circuit (now the default), lap timing, play/pause. |
 | P5-B neuroevolution | **not started** | `ml/racer/` holds only `sim.py` and `track.py` (that is P5-A, the physics port); no `net`/`evolution`/`train`, no racer checkpoints. `manifest.json` carries an empty `"racer": []` ready for them. The pace cars are a hand-written raycast heuristic and the page says so. |
 | P0-C content | **mostly done** | Projects, about copy and contact links ported from the old portfolio and checked against the repos. One placeholder left: the Brilliant Harvest experience entry. It renders a visible warning until `placeholder: true` comes off it. |
@@ -83,18 +84,16 @@ so they are not re-copied:
 ## What is next, in order
 
 1. **Brilliant Harvest** — the one placeholder left on the page. Lucas is writing it.
-2. **P3-B is unreachable.** Three tested chart components that nothing renders. Cheapest
-   real win on this list.
-3. **Pace-car tiers are cosmetic.** All three converge on ~12.1 s laps, because even the
+2. **Pace-car tiers are cosmetic.** All three converge on ~12.1 s laps, because even the
    0.45 throttle cap reaches top speed on a 698 m lap. Needs a speed cap, not a throttle
    cap, or the three buttons are theatre.
-4. **Docs that overclaim.** `ml/racer/__init__.py` advertises `net`/`evolution`/`train`
+3. **Docs that overclaim.** `ml/racer/__init__.py` advertises `net`/`evolution`/`train`
    modules that do not exist, and `docs/TRAINING-PLAN.md:223` says "The racer already uses
    neuroevolution". It does not.
-5. **Security review before the API is public.** `/api/games` is an unauthenticated POST
+4. **Security review before the API is public.** `/api/games` is an unauthenticated POST
    into Postgres, rate-limited on a client-supplied hash.
-6. **Hosting.** No VPS yet; C1.4 and C5.4 both block on it.
-7. **P5-B** — the racer's neuroevolution run, whenever the appetite is there. `ghostPolicy`
+5. **Hosting.** No VPS yet; C1.4 and C5.4 both block on it.
+6. **P5-B** — the racer's neuroevolution run, whenever the appetite is there. `ghostPolicy`
    in `RacerCanvas.svelte` is the single seam an evolved net replaces.
 
 ### Notes for P5-B specifically
@@ -110,6 +109,11 @@ so they are not re-copied:
   input side, which is where the speed-scaled steering authority lives.
 
 ## Standing notes
+
+- **A redesign can delete a package.** `381eadb` collapsed the site to one page and took
+  `work/`, `about/`, `lab/`, `lab/connect4/` and `lab/dashboard/` with it. The dashboard's
+  components survived in `$lib`, still passing their tests, rendering nowhere, for two
+  days — a green suite says nothing about whether anything imports the thing it tests.
 
 - **Session rate limits killed four agents mid-flight** on 2026-09-18. Three had already
   written their files; only P2-D was a real loss. Check for partial work before re-running

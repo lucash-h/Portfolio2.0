@@ -231,6 +231,8 @@
 	<a href="#experience">experience</a>
 	<a href="#work">work</a>
 	<a href="#about">about</a>
+	<!-- A real route, not an anchor: the dashboard is its own page. -->
+	<a href="/lab">lab</a>
 	<a href="#contact">contact</a>
 </nav>
 
@@ -246,7 +248,7 @@
 				</p>
 				<div class="stats">
 					<span>
-						games logged <b>{gamesLogged ?? '—'}</b>
+						games logged <a class="stat-link" href="/lab"><b>{gamesLogged ?? '—'}</b></a>
 					</span>
 					<span>
 						inference <b>{latencyMs === null ? '—' : `${latencyMs.toFixed(1)} ms`}</b>
@@ -448,6 +450,18 @@
 		font-family: var(--font-mono);
 		font-size: 12px;
 		color: var(--color-text-faint);
+	}
+
+	.stat-link {
+		color: inherit;
+		text-decoration: none;
+		border-bottom: 1px solid var(--color-accent-line);
+		transition: var(--transition-base);
+	}
+
+	.stat-link:hover {
+		color: var(--color-accent);
+		border-bottom-color: var(--color-accent);
 	}
 
 	.fig1-figure {
