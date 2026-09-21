@@ -37,8 +37,11 @@
 	const canonical = $derived(`${page.url.origin}${page.url.pathname}`);
 	const ogImage = $derived(`${page.url.origin}/og.png`);
 
+	// Double-quoted because the copy contains an apostrophe; escaping it inside
+	// single quotes would work too, but this is what Prettier settles on.
+	// Shown twice: as the <h1> in Fig. 1 and as the lead line under ABOUT.
 	const headline =
-		'Lucas Hately-Honeyman — software engineering student at the University of Victoria, training small networks and putting them on the web.';
+		"Hi! My name is Lucas and I'm a software engineering student at UVic with an interest in ML applications.";
 
 	interface Project {
 		title: string;
