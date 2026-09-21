@@ -6,9 +6,9 @@
 	 * Contact below the fold. Built from the "Notebook" design handoff, with the
 	 * design's hardcoded palette expressed through tokens so dark mode survives.
 	 *
-	 * PLACEHOLDER CONTENT: the headline, the six work entries and the contact
-	 * links are stand-ins for layout testing. Every one is marked below. None of
-	 * it describes real projects or real accounts.
+	 * Content is real: the projects, the about copy and the contact links are
+	 * ported from the previous portfolio (github.com/lucash-h/Portfolio_Website)
+	 * and checked against the repositories they point at.
 	 */
 	import { page } from '$app/state';
 	import GameRail from '$lib/components/GameRail.svelte';
@@ -37,48 +37,101 @@
 	const canonical = $derived(`${page.url.origin}${page.url.pathname}`);
 	const ogImage = $derived(`${page.url.origin}/og.png`);
 
-	// PLACEHOLDER — Lucas is rewriting this line.
-	const headline = 'Lucas — software engineering student, training small networks and putting them on the web.';
+	const headline =
+		'Lucas Hately-Honeyman — software engineering student at the University of Victoria, training small networks and putting them on the web.';
 
-	// PLACEHOLDER — invented entries for layout testing only. Replace wholesale.
-	const projects = [
+	interface Project {
+		title: string;
+		meta: string;
+		body: string;
+		tags: string[];
+		/** Repository, when there is a public one to show. */
+		href?: string;
+	}
+
+	const projects: Project[] = [
 		{
-			title: 'Distributed Task Scheduler',
-			meta: '2026 · Go, Postgres',
-			body: 'A work queue with at-least-once delivery, exponential backoff and a dead-letter path. Written to understand what actually goes wrong when a worker dies mid-job.',
-			tags: ['go', 'postgres', 'queues']
+			title: 'NeatInfo',
+			meta: '2026 · JavaScript, Cloudflare Workers, D1, R2',
+			body:
+				'A reading tracker built so the backlog can never become a guilt pile: anything left ' +
+				'undecided past the lapse window resolves itself to “lapsed” rather than sitting there ' +
+				'forever. Three surfaces — today, pending, archive — and nothing is ever deleted, so ' +
+				'the archive stays searchable. One Worker serves both the API and the built frontend, ' +
+				'with D1 for the queryable data and R2 for raw HTML.',
+			tags: ['cloudflare', 'sqlite', 'full-stack'],
+			href: 'https://github.com/lucash-h/NeatInfo'
 		},
 		{
-			title: 'Static Site Compiler',
-			meta: '2025 · Rust',
-			body: 'Markdown to HTML with incremental rebuilds driven by a file-watch graph. Rebuilds only the pages whose inputs actually changed.',
-			tags: ['rust', 'parsing', 'tooling']
+			title: 'dev-pipeline — a Claude Code plugin',
+			meta: '2026 · Python, Claude Code',
+			body:
+				'Takes a feature from idea to merged code: a PRD whose acceptance criteria are ' +
+				'machine-checkable, a build loop that tests against them, and a gate that re-reads the ' +
+				'finished diff against those criteria from cold context — because the model that wrote ' +
+				'the code is the worst judge of whether it meets the spec.',
+			tags: ['agents', 'tooling', 'ci'],
+			href: 'https://github.com/lucash-h/Claudius_The_Third'
 		},
 		{
-			title: 'Sensor Telemetry Pipeline',
-			meta: '2025 · Python, TimescaleDB',
-			body: 'Ingests readings from a handful of microcontrollers, downsamples on write, and serves a rolling window to a dashboard over websockets.',
-			tags: ['python', 'timeseries', 'iot']
+			title: 'AWS DeepRacer',
+			meta: '2025 · Python, reinforcement learning',
+			body:
+				'A reward function tracking distance from the centre line across five markers instead ' +
+				'of three, tuned hard for speed. It won in simulation and drove badly on the physical ' +
+				'car — the 0.5–4 speed interval left it either crawling or out of control, where 0.5–2 ' +
+				'would have been the right range. The most useful thing I got out of it was a concrete ' +
+				'sense of how far a reward shaped to the simulator can be from the track it runs on.',
+			tags: ['rl', 'reward-shaping', 'sim-to-real'],
+			href: 'https://github.com/lucash-h/AWS_Deepracer'
 		},
 		{
-			title: 'Type-Safe Query Builder',
-			meta: '2025 · TypeScript',
-			body: 'A small ORM-free layer that infers row types from a schema definition, so a renamed column is a compile error rather than a runtime surprise.',
-			tags: ['typescript', 'types', 'sql']
-		},
-		{
-			title: 'Terminal Text Editor',
-			meta: '2024 · C',
-			body: 'A modal editor with a piece-table buffer, syntax highlighting and undo. Built to find out why editors use piece tables instead of arrays.',
-			tags: ['c', 'data structures']
-		},
-		{
-			title: 'Route Planner',
-			meta: '2024 · Java',
-			body: 'Contraction hierarchies over an OpenStreetMap extract, cutting shortest-path queries on a city-sized graph from seconds to milliseconds.',
-			tags: ['java', 'graphs', 'algorithms']
+			title: 'Manifold-Guided GAN',
+			meta: '2024 · Python, TensorFlow',
+			body:
+				'A GAN that fights mode collapse with a second discriminator. Generated digits go ' +
+				'through an encoder down to a 64-element latent vector and are judged there as well as ' +
+				'at pixel level, so the generator is penalised for collapsing onto a handful of samples ' +
+				'instead of covering the dataset. It sits next to a plain MNIST GAN in the same ' +
+				'repository, which is what makes the difference legible.',
+			tags: ['tensorflow', 'gans', 'mnist'],
+			href: 'https://github.com/lucash-h/GANS'
 		}
 	];
+
+	interface Experience {
+		role: string;
+		company: string;
+		period: string;
+		/** One line per thing worth saying; rendered as a list. */
+		points: string[];
+		tags: string[];
+		href?: string;
+		/** Marks the entry as not-yet-written. Anything true here renders a
+		 *  visible warning above the section, so a half-filled entry cannot go
+		 *  live quietly — see the note in `docs/STATUS.md` (P0-C). */
+		placeholder?: boolean;
+	}
+
+	// PLACEHOLDER — Lucas is filling this in. Every field below is a stand-in,
+	// not a description of the job. Delete `placeholder: true` once it is real
+	// and the warning banner disappears with it.
+	const experience: Experience[] = [
+		{
+			placeholder: true,
+			role: 'TODO — job title',
+			company: 'Brilliant Harvest',
+			period: 'TODO — e.g. May–August 2025',
+			points: [
+				'TODO — the main thing you built or owned, and what it was for.',
+				'TODO — a second piece of work, ideally one you would defend in an interview.',
+				'TODO — anything measurable: throughput, time saved, scale, users.'
+			],
+			tags: ['todo — tech you used']
+		}
+	];
+
+	const hasPlaceholderExperience = $derived(experience.some((e) => e.placeholder));
 
 	let gamesLogged = $state<number | null>(null);
 	let latencyMs = $state<number | null>(null);
@@ -172,6 +225,7 @@
 
 <nav class="topnav" class:visible={navVisible}>
 	<a class="brand" href="#top">Lucas</a>
+	<a href="#experience">experience</a>
 	<a href="#work">work</a>
 	<a href="#about">about</a>
 	<a href="#contact">contact</a>
@@ -181,7 +235,6 @@
 	{#snippet panelA()}
 		<div class="fig1">
 			<div class="fig1-copy">
-				<!-- PLACEHOLDER headline -->
 				<h1>{headline}</h1>
 				<p class="lead">
 					So I trained the two things on this page. No inference server: the checkpoints are
@@ -217,13 +270,50 @@
 </GameRail>
 
 <div class="below">
+	<section id="experience">
+		<h2>EXPERIENCE</h2>
+		{#if hasPlaceholderExperience}
+			<p class="placeholder-note">
+				Placeholder — this entry is not written yet. Do not ship it like this.
+			</p>
+		{/if}
+		{#each experience as job (job.company + job.role)}
+			<article class="entry" class:is-placeholder={job.placeholder}>
+				<h3>
+					{#if job.href}
+						<a class="entry-link" href={job.href} target="_blank" rel="noreferrer noopener">
+							{job.company}
+						</a>
+					{:else}
+						{job.company}
+					{/if}
+				</h3>
+				<div class="meta">{job.role} · {job.period}</div>
+				<ul class="points">
+					{#each job.points as point (point)}
+						<li>{point}</li>
+					{/each}
+				</ul>
+				<div class="tags">
+					{#each job.tags as t (t)}<span class="tag">{t}</span>{/each}
+				</div>
+			</article>
+		{/each}
+	</section>
+
 	<section id="work">
 		<h2>WORK</h2>
-		<!-- PLACEHOLDER: delete this line and the entries below once real projects are in. -->
-		<p class="placeholder-note">Placeholder entries — replace with real projects.</p>
 		{#each projects as p (p.title)}
 			<article class="entry">
-				<h3>{p.title}</h3>
+				<h3>
+					{#if p.href}
+						<a class="entry-link" href={p.href} target="_blank" rel="noreferrer noopener">
+							{p.title}
+						</a>
+					{:else}
+						{p.title}
+					{/if}
+				</h3>
 				<div class="meta">{p.meta}</div>
 				<p>{p.body}</p>
 				<div class="tags">
@@ -237,21 +327,27 @@
 		<h2>ABOUT</h2>
 		<p class="about-lead">{headline}</p>
 		<p class="about-body">
-			<!-- PLACEHOLDER body copy -->
 			Most of what is on this page exists because I wanted to know how the pieces fit together —
 			how a network actually gets from self-play games to something you can click on. The
 			training runs on my own machine, the checkpoints are exported to ONNX, and the site serves
 			them as static files.
 		</p>
+		<p class="about-body">
+			Outside of that I whitewater kayak, downhill ski, and read about whatever tech topic has my
+			attention that week.
+		</p>
 	</section>
 
 	<section id="contact">
 		<h2>CONTACT</h2>
-		<!-- PLACEHOLDER links — not real accounts. -->
 		<div class="links">
-			<a href="mailto:hello@example.com">hello@example.com</a>
-			<a href="https://example.com">github</a>
-			<a href="https://example.com">linkedin</a>
+			<a href="mailto:lhatelyhoneyman@gmail.com">lhatelyhoneyman@gmail.com</a>
+			<a href="https://github.com/lucash-h" target="_blank" rel="noreferrer noopener">github</a>
+			<a
+				href="https://www.linkedin.com/in/lucas-hately-honeyman-2bb481235/"
+				target="_blank"
+				rel="noreferrer noopener">linkedin</a
+			>
 		</div>
 	</section>
 
@@ -397,13 +493,6 @@
 		margin: 0 0 var(--space-4);
 	}
 
-	.placeholder-note {
-		margin: 0 0 var(--space-4);
-		font-family: var(--font-mono);
-		font-size: 11px;
-		color: var(--color-text-faint);
-	}
-
 	.entry {
 		border-top: 1px solid var(--color-border-soft);
 		padding: 30px 0;
@@ -414,6 +503,45 @@
 		font-size: 21px;
 		font-weight: 500;
 		letter-spacing: -0.02em;
+	}
+
+	.placeholder-note {
+		margin: 0 0 var(--space-4);
+		font-family: var(--font-mono);
+		font-size: 11px;
+		color: var(--color-accent);
+		border: 1px dashed var(--color-accent-line);
+		background: var(--color-accent-wash-soft);
+		padding: 8px 12px;
+	}
+
+	/* Unwritten entries read as drafts rather than as content. */
+	.entry.is-placeholder {
+		border-left: 2px dashed var(--color-accent-line);
+		padding-left: var(--space-4);
+	}
+
+	.points {
+		margin: var(--space-3) 0 0;
+		padding-left: 1.1rem;
+		color: var(--color-text-body);
+	}
+
+	.points li {
+		margin-bottom: 6px;
+		line-height: var(--line-height-prose);
+	}
+
+	.entry-link {
+		color: inherit;
+		text-decoration: none;
+		border-bottom: 1px solid var(--color-accent-line);
+		transition: var(--transition-base);
+	}
+
+	.entry-link:hover {
+		color: var(--color-accent);
+		border-bottom-color: var(--color-accent);
 	}
 
 	.meta {

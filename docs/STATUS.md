@@ -51,7 +51,7 @@ Everything below was checked by running it, not by taking an agent's word for it
 | P2-S ml scaffold | done | venv lives at `.ml_venv/`, now gitignored. |
 | P2-D browser ONNX | done | Real inference verified by tampering: corrupting the synthetic model fails exactly the tests that use it. Wired into the exhibit page. |
 | P2-A env + MCTS | done | Parity proven both ways; tamper-tested. Python and TypeScript now agree with the same fixture corpus. |
-| P0-C content | **not started** | Blocked on real content from Lucas. |
+| P0-C content | **mostly done** | Projects, about copy and contact links ported from the old portfolio and checked against the repos. One placeholder left: the Brilliant Harvest experience entry, which Lucas is filling in. It renders a visible warning until `placeholder: true` comes off it. |
 
 ## What is next, in order
 
@@ -66,7 +66,8 @@ Everything below was checked by running it, not by taking an agent's word for it
 4. **Phase 3** — P3-A (db + API) and P3-B (dashboard) are mutually independent and can
    run in parallel right now; the `/api/stats` shape is contract-fixed. Neither depends
    on training finishing.
-5. **P0-C** — real site content, whenever Lucas supplies it.
+5. **P0-C** — the Brilliant Harvest experience entry is still a placeholder and says so
+   on the page. Everything else in the content pass is done.
 
 ### Notes for P2-B specifically
 
