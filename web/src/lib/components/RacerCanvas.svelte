@@ -202,6 +202,18 @@
 	 *  to reach the effect's private simulation state. */
 	let restartHandler: (() => void) | null = null;
 
+	/** Same indirection for the play/pause button. Deliberately NOT a `$state`
+	 *  the effect reads: reading one inside `$effect` would make the effect
+	 *  depend on it, so every pause would tear the whole simulation down and
+	 *  respawn the cars. The effect only ever WRITES `isRunning` (writing
+	 *  tracks nothing), and the button only ever calls `runHandler`. */
+	let runHandler: ((run: boolean) => void) | null = null;
+
+	/** Mirror of the effect's private `desiredRunning`, for the button label.
+	 *  Not the same as "the loop is ticking" — an off-screen panel pauses
+	 *  itself without changing what the viewer asked for. */
+	let isRunning = $state(false);
+
 	// ---------------------------------------------------------------------
 	// Palette — read from CSS custom properties on mount/resize/theme change
 	// so nothing in this file hardcodes a colour. See tokens.css.
@@ -459,6 +471,7 @@
 		function syncRunning(): void {
 			if (desiredRunning && !offscreenOrHidden) startLoop();
 			else stopLoop();
+			isRunning = desiredRunning;
 		}
 
 		function resizeCanvas() {
@@ -615,12 +628,12 @@
 			pressed[mapped] = e.type === 'keydown';
 			if (e.type === 'keydown') {
 				if (!playerControlled) playerControlled = true;
-				if (showStartPrompt) {
-					showStartPrompt = false;
-					if (reducedMotion && !desiredRunning) {
-						desiredRunning = true;
-						syncRunning();
-					}
+				showStartPrompt = false;
+				// Taking the wheel implies starting, whether the sim is paused
+				// because of reduced motion or because the viewer paused it.
+				if (!desiredRunning) {
+					desiredRunning = true;
+					syncRunning();
 				}
 			}
 		}
@@ -696,8 +709,17 @@
 				};
 			};
 
+			runHandler = (run: boolean) => {
+				if (run) showStartPrompt = false;
+				desiredRunning = run;
+				syncRunning();
+			};
+
 			if (reducedMotion) {
+				// Reduced motion: never start on its own. The overlay's play
+				// button (or any driving key) starts it.
 				showStartPrompt = true;
+				isRunning = false;
 				draw();
 			} else {
 				desiredRunning = true;
@@ -713,6 +735,8 @@
 			if (ctl.resizeObserver) ctl.resizeObserver.disconnect();
 			ctl.visibility?.dispose();
 			restartHandler = null;
+			runHandler = null;
+			isRunning = false;
 		};
 	});
 
@@ -727,6 +751,12 @@
 	 *  simulation state without that state living in reactive `$state`. */
 	function restartLap() {
 		restartHandler?.();
+	}
+
+	/** Play/pause. Same `restartLap` indirection story: the mount effect owns
+	 *  the loop, this only asks it to start or stop. */
+	function toggleRunning() {
+		runHandler?.(!isRunning);
 	}
 </script>
 
@@ -754,8 +784,16 @@
 			</div>
 		</div>
 
-		{#if showStartPrompt}
-			<div class="start-prompt">press a key to start — motion is reduced by your system settings</div>
+		{#if trackLoaded && !isRunning && !trackError}
+			<div class="start-prompt">
+				<button type="button" class="play-overlay-button" onclick={toggleRunning}>
+					▶ play simulation
+				</button>
+				{#if showStartPrompt}
+					<span class="start-prompt-note">motion is reduced by your system settings, so this
+						does not start on its own</span>
+				{/if}
+			</div>
 		{/if}
 
 		{#if trackError}
@@ -788,6 +826,9 @@
 			<span class="accent">best <b>{formatLapTime(hud.lapBestMs)}</b></span>
 			<span>ghost <b>{formatLapTime(hud.ghostBestMs)}</b></span>
 		</span>
+		<button type="button" class="play-button" onclick={toggleRunning}>
+			{isRunning ? '❚❚ pause simulation' : '▶ play simulation'}
+		</button>
 		<button type="button" class="restart-button" onclick={restartLap}>restart lap</button>
 	</div>
 </div>
@@ -877,6 +918,8 @@
 		position: absolute;
 		inset: 0;
 		display: flex;
+		flex-direction: column;
+		gap: 14px;
 		align-items: center;
 		justify-content: center;
 		text-align: center;
@@ -885,6 +928,26 @@
 		font-size: 12px;
 		color: var(--color-text-faint);
 		background: color-mix(in srgb, var(--color-surface) 85%, transparent);
+	}
+
+	.start-prompt-note {
+		max-width: 44ch;
+	}
+
+	.play-overlay-button {
+		padding: 12px 22px;
+		font-family: var(--font-mono);
+		font-size: 13px;
+		cursor: pointer;
+		border: var(--border-width) solid var(--color-accent);
+		background: var(--color-accent-wash);
+		color: var(--color-accent);
+		transition: var(--transition-base);
+	}
+
+	.play-overlay-button:hover {
+		background: var(--color-accent);
+		color: var(--color-accent-contrast);
 	}
 
 	.bottom-strip {
@@ -904,6 +967,7 @@
 	}
 
 	.tier-button,
+	.play-button,
 	.restart-button {
 		padding: 6px 11px;
 		font-family: var(--font-mono);
@@ -917,8 +981,15 @@
 	}
 
 	.tier-button:hover,
+	.play-button:hover,
 	.restart-button:hover {
 		border-color: var(--color-accent);
+	}
+
+	.play-button {
+		margin-left: auto;
+		color: var(--color-accent);
+		border-color: var(--color-accent-line);
 	}
 
 	.tier-button.selected {
@@ -930,7 +1001,6 @@
 	.restart-button {
 		border: 1px dashed var(--color-border-dashed);
 		background: transparent;
-		margin-left: auto;
 	}
 
 	.restart-button:hover {
