@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "connect4": {
+    "architecture": {
+      "channels": 32,
+      "blocks": 4,
+      "parameters": 89219
+    },
+    "hyperparameters": {
+      "simulations": 48,
+      "batchSize": 128,
+      "learningRate": 0.001,
+      "gamesPerCycle": 25,
+      "trainStepsPerCycle": 50,
+      "bufferCapacity": 200000,
+      "dirichletEpsilon": 0.25,
+      "dirichletAlpha": 0.3,
+      "temperatureThreshold": 10,
+      "seed": 0
+    },
+    "run": {
+      "gamesTrained": 300,
+      "firstCheckpointAt": "2026-09-19T17:56:14.840400+00:00",
+      "lastCheckpointAt": "2026-09-19T18:05:26.057367+00:00",
+      "spanSeconds": 551.216967
+    },
+    "checkpoints": [
+      {
+        "id": "c4-0000050",
+        "gamesTrained": 50,
+        "parameters": 89219,
+        "savedAt": "2026-09-19T17:56:14.840400+00:00",
+        "checkpointKb": 1095,
+        "onnxKb": 351
+      },
+      {
+        "id": "c4-0000150",
+        "gamesTrained": 150,
+        "parameters": 89219,
+        "savedAt": "2026-09-19T17:59:33.705391+00:00",
+        "checkpointKb": 1095,
+        "onnxKb": 351
+      },
+      {
+        "id": "c4-0000300",
+        "gamesTrained": 300,
+        "parameters": 89219,
+        "savedAt": "2026-09-19T18:05:26.057367+00:00",
+        "checkpointKb": 1095,
+        "onnxKb": 351
+      }
+    ],
+    "missing": {
+      "lossHistory": "train.py prints per-cycle loss and does not persist it",
+      "elo": "no tournament has run (ml/tournament is unimplemented)"
+    }
+  }
+}

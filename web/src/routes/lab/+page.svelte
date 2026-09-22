@@ -25,6 +25,14 @@
 		formatLapMs,
 		type StatsResponse
 	} from '$lib/components/charts';
+	import {
+		formatDate,
+		formatDuration,
+		formatNumber,
+		humanizeKey,
+		parseTrainingStats,
+		type TrainingStats
+	} from '$lib/trainingStats';
 
 	const TITLE = 'Lab — what the exhibits have measured';
 	const DESCRIPTION =
@@ -34,6 +42,30 @@
 
 	let stats = $state<StatsResponse>(EMPTY_STATS);
 	let status = $state<'loading' | 'loaded' | 'unavailable'>('loading');
+
+	/**
+	 * Training stats are static and exist today, unlike the gameplay numbers
+	 * above, which need people to actually play. Fetched separately so a
+	 * missing `training.json` costs this section and nothing else.
+	 */
+	let training = $state<TrainingStats | null>(null);
+
+	$effect(() => {
+		let cancelled = false;
+		(async () => {
+			try {
+				const res = await fetch('/models/training.json');
+				if (!res.ok) return;
+				const parsed = parseTrainingStats(await res.json());
+				if (!cancelled) training = parsed;
+			} catch {
+				/* no training stats; the section simply does not render */
+			}
+		})();
+		return () => {
+			cancelled = true;
+		};
+	});
 
 	$effect(() => {
 		let cancelled = false;
@@ -89,13 +121,14 @@
 		<h1>LAB</h1>
 		{#if nothingYet}
 			<p>
-				Every number on this page comes from logged games and trained checkpoints. Nothing here
-				is a mockup, which is also why it is empty: the site is not live yet, so almost nothing
-				has been played. The charts say so rather than filling themselves in.
+				Every number on this page comes from trained checkpoints and logged games. Nothing here
+				is a mockup. The training numbers are real and exist today; the gameplay numbers below
+				them are empty, because the site is not live yet and almost nothing has been played.
+				The charts say so rather than filling themselves in.
 			</p>
 		{:else}
 			<p>
-				Every number on this page comes from logged games and trained checkpoints. Nothing here
+				Every number on this page comes from trained checkpoints and logged games. Nothing here
 				is a mockup, and nothing is filled in to look busier than it is.
 			</p>
 		{/if}
@@ -112,6 +145,89 @@
 			<span class="total-label">games logged in total</span>
 		</p>
 	</header>
+
+	{#if training}
+		<section>
+			<h2>TRAINING</h2>
+			<p class="empty">
+				The network behind the Connect 4 exhibit, read straight out of the checkpoint files it
+				was exported from. This is the part that exists whether or not anyone has played.
+			</p>
+
+			<div class="facts">
+				<div class="fact">
+					<span class="fact-value">{formatNumber(training.architecture.parameters)}</span>
+					<span class="fact-label">parameters</span>
+				</div>
+				{#if training.architecture.channels && training.architecture.blocks}
+					<div class="fact">
+						<span class="fact-value"
+							>{training.architecture.channels}<span class="times">×</span
+							>{training.architecture.blocks}</span
+						>
+						<span class="fact-label">channels × residual blocks</span>
+					</div>
+				{/if}
+				<div class="fact">
+					<span class="fact-value">{formatNumber(training.run.gamesTrained)}</span>
+					<span class="fact-label">self-play games</span>
+				</div>
+				{#if formatDuration(training.run.spanSeconds)}
+					<div class="fact">
+						<span class="fact-value">{formatDuration(training.run.spanSeconds)}</span>
+						<span class="fact-label">first checkpoint to last</span>
+					</div>
+				{/if}
+			</div>
+
+			<div class="split">
+				<div>
+					<h3>Hyperparameters</h3>
+					<dl class="params">
+						{#each Object.entries(training.hyperparameters) as [key, value] (key)}
+							<dt>{humanizeKey(key)}</dt>
+							<dd>{value}</dd>
+						{/each}
+					</dl>
+				</div>
+
+				<div>
+					<h3>Checkpoints</h3>
+					<div class="table-wrap">
+						<table>
+							<thead>
+								<tr>
+									<th scope="col">Checkpoint</th>
+									<th scope="col">Games</th>
+									<th scope="col">ONNX</th>
+									<th scope="col">Saved</th>
+								</tr>
+							</thead>
+							<tbody>
+								{#each training.checkpoints as cp (cp.id)}
+									<tr>
+										<td>{cp.id}</td>
+										<td>{formatNumber(cp.gamesTrained)}</td>
+										<td>{cp.onnxKb ? `${cp.onnxKb} KB` : '—'}</td>
+										<td>{formatDate(cp.savedAt) ?? '—'}</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+				</div>
+			</div>
+
+			{#if training.missing}
+				<p class="note">
+					Not measured, rather than hidden:
+					{#each Object.entries(training.missing) as [key, why], i (key)}{i > 0
+							? '; '
+							: ' '}<strong>{humanizeKey(key)}</strong> — {why}{/each}.
+				</p>
+			{/if}
+		</section>
+	{/if}
 
 	<section>
 		<h2>CONNECT 4</h2>
@@ -252,6 +368,78 @@
 		line-height: var(--line-height-prose);
 		color: var(--color-text-muted);
 		max-width: 62ch;
+	}
+
+	h3 {
+		font-family: var(--font-mono);
+		font-size: 11px;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		color: var(--color-text-faint);
+		font-weight: 500;
+		margin: 0 0 var(--space-3);
+	}
+
+	.facts {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+		gap: clamp(12px, 2vw, 22px);
+		margin-bottom: clamp(26px, 4vh, 40px);
+	}
+
+	.fact {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		border-left: 2px solid var(--color-accent-line);
+		padding-left: var(--space-3);
+	}
+
+	.fact-value {
+		font-size: clamp(20px, 2.4vw, 26px);
+		font-weight: 600;
+		letter-spacing: -0.02em;
+	}
+
+	.times {
+		color: var(--color-text-faint);
+		margin: 0 2px;
+	}
+
+	.fact-label {
+		font-family: var(--font-mono);
+		font-size: 11px;
+		color: var(--color-text-faint);
+	}
+
+	.split {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+		gap: clamp(20px, 3vw, 40px);
+		align-items: start;
+	}
+
+	.params {
+		display: grid;
+		grid-template-columns: 1fr auto;
+		gap: 6px var(--space-4);
+		margin: 0;
+		font-family: var(--font-mono);
+		font-size: 12px;
+	}
+
+	.params dt {
+		color: var(--color-text-faint);
+		border-bottom: 1px solid var(--color-border-soft);
+		padding-bottom: 5px;
+	}
+
+	.params dd {
+		margin: 0;
+		color: var(--color-text);
+		text-align: right;
+		border-bottom: 1px solid var(--color-border-soft);
+		padding-bottom: 5px;
 	}
 
 	.charts {

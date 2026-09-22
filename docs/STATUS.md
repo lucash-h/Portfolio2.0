@@ -26,9 +26,10 @@ Dates are when it was last actually run.
   and the racer runs the Grand Circuit with all three cars lapping in 12–19 s
 - Front page verified at a real 390×844 viewport: 390px document scroll width,
   zero elements past the viewport _(2026-09-21)_
-- `.ml_venv/Scripts/python.exe -m pytest ml/ -q` — 86 tests passing _(2026-09-19,
-  not re-run since; no `ml/` code has changed since then)_
-- `ruff check ml/` and `ruff format --check ml/` clean _(2026-09-19)_
+- `.ml_venv/Scripts/python.exe -m pytest ml/ -q` — **185 tests passing** _(2026-09-21)_.
+  The previous figure in this file, 86, was already wrong when it was written; it is not
+  a regression, it was never re-counted.
+- `ruff check ml/` and `ruff format --check ml/` clean _(2026-09-21)_
 
 ### Corrected claims
 
@@ -76,6 +77,7 @@ so they are not re-copied:
 | P2-A env + MCTS | done | Parity proven both ways; tamper-tested. Python and TypeScript now agree with the same fixture corpus. |
 | P2-B/P2-C training + export | done | Real checkpoints at 50/150/300 self-play games, exported to ONNX and listed in `web/static/models/manifest.json`. The exhibit's difficulty ladder is those three checkpoints. |
 | P3-A db + API | done | `/api/games` and `/api/stats`. Both degrade to an empty-state response with no database, so a fresh install renders. |
+| P3-B dashboard+ | done | Extended past its original scope with a TRAINING section: architecture, parameter count, hyperparameters and per-checkpoint provenance, written by `ml/export/training_stats.py` into `static/models/training.json` in the same pass that exports the ONNX. This is the only part of the dashboard with data in it today, since the rest waits on people playing. |
 | P3-B dashboard | done | Live at `/lab`, linked from the nav and from the front page's "games logged" stat. The original `/lab/dashboard` page was deleted by the redesign (381eadb) along with the whole route tree; this is a rebuild against the current design, not a revert. Acceptance met: renders against a fixture payload and the empty case, no horizontal scroll at 360px. |
 | P4 racer | done | Deterministic fixed-step physics with TS/Python parity, four tracks incl. the 698 m Grand Circuit (now the default), lap timing, play/pause. |
 | P5-B neuroevolution | **not started** | `ml/racer/` holds only `sim.py` and `track.py` (that is P5-A, the physics port); no `net`/`evolution`/`train`, no racer checkpoints. `manifest.json` carries an empty `"racer": []` ready for them. The pace cars are a hand-written raycast heuristic and the page says so. |
@@ -87,14 +89,23 @@ so they are not re-copied:
 2. **Pace-car tiers are cosmetic.** All three converge on ~12.1 s laps, because even the
    0.45 throttle cap reaches top speed on a 698 m lap. Needs a speed cap, not a throttle
    cap, or the three buttons are theatre.
-3. **Docs that overclaim.** `ml/racer/__init__.py` advertises `net`/`evolution`/`train`
-   modules that do not exist, and `docs/TRAINING-PLAN.md:223` says "The racer already uses
-   neuroevolution". It does not.
+3. **Docs that overclaim.** Three instances of the same pattern, a package docstring
+   promising modules nobody wrote: `ml/racer/__init__.py` advertises
+   `net`/`evolution`/`train`; `ml/tournament/__init__.py` advertises `elo`/`run` and
+   contains only itself (that is P3-C, and why every Elo is `null`); and
+   `docs/TRAINING-PLAN.md:223` says "The racer already uses neuroevolution". It does not.
 4. **Security review before the API is public.** `/api/games` is an unauthenticated POST
    into Postgres, rate-limited on a client-supplied hash.
 5. **Hosting.** No VPS yet; C1.4 and C5.4 both block on it.
 6. **P5-B** — the racer's neuroevolution run, whenever the appetite is there. `ghostPolicy`
    in `RacerCanvas.svelte` is the single seam an evolved net replaces.
+
+### If you want a loss curve
+
+`train.py` computes per-cycle policy and value loss and prints them. Nothing persists
+them, so the three existing checkpoints have no recoverable history and the dashboard
+says so rather than inventing one. Appending each cycle's losses to a JSONL file next to
+the checkpoints would make a real training curve possible — for future runs only.
 
 ### Notes for P5-B specifically
 

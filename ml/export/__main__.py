@@ -22,6 +22,7 @@ from pathlib import Path
 
 from ml.export.manifest import build_connect4_entry, write_connect4_manifest
 from ml.export.to_onnx import export_checkpoint_to_onnx
+from ml.export.training_stats import build_training_stats, write_training_stats
 from ml.paths import CHECKPOINTS_DIR, MODELS_DIR
 
 LADDER_PATTERN = re.compile(r"^c4-(\d{7})\.pt$")
@@ -80,12 +81,20 @@ def export_ladder(
     manifest_path = models_dir / "manifest.json"
     write_connect4_manifest(manifest_path, entries)
     print(f"Wrote manifest: {manifest_path}")
+
+    # Written from the same checkpoints in the same pass, so the dashboard's
+    # training stats cannot drift from the weights that were just exported.
+    stats_path = models_dir / "training.json"
+    write_training_stats(stats_path, build_training_stats(checkpoint_paths, onnx_dir))
+    print(f"Wrote training stats: {stats_path}")
     return entries
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Export Connect 4 ladder checkpoints to ONNX and write the manifest."
+        description=(
+            "Export Connect 4 ladder checkpoints to ONNX and write manifest.json and training.json."
+        )
     )
     parser.add_argument(
         "--checkpoints-dir",
@@ -97,7 +106,10 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--models-dir",
         type=Path,
         default=MODELS_DIR,
-        help="Directory to write connect4/*.onnx and manifest.json into (default: %(default)s).",
+        help=(
+            "Directory to write connect4/*.onnx, manifest.json and training.json "
+            "into (default: %(default)s)."
+        ),
     )
     return parser
 

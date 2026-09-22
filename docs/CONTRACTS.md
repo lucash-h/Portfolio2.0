@@ -256,6 +256,19 @@ exist. The UI reads it; nothing hardcodes a checkpoint. The Python export step w
 - `file` is relative to `web/static/models/`.
 - `elo` may be `null` until the tournament has run.
 
+### 5.1 `training.json` — not part of this contract
+
+`web/static/models/training.json` sits next to the manifest and is written by the same
+export pass (`ml/export/training_stats.py`), out of the checkpoint files themselves. It
+describes how the checkpoints were made — architecture, parameter count, hyperparameters,
+per-checkpoint timestamps — and exists for the `/lab` dashboard.
+
+It is deliberately **outside** this contract. The manifest is load-bearing: the exhibit
+cannot pick an opponent without it, so its shape is fixed and changes are breaking.
+`training.json` is read by one page that degrades to "no training stats" when it is
+absent or malformed, so it is free to grow without a contract revision. Nothing in the
+game path may read it.
+
 ## 6. Database
 
 Postgres. Applied from `web/src/lib/db/schema.sql`.
